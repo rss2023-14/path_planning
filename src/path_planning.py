@@ -21,22 +21,35 @@ class PathPlan(object):
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
 
 
-    def map_cb(self, msg):
+    def map_cb(self, msg): # Occupancy Grid
+        pass
+
+        msg.data # int array, row major order, starting with 0,0, probabilties in range of 0, 100
+        msg.info.width # int
+        msg.info.height #int
+        msg.info.origin.position # x, y, z
+        msg.info.origin.orientation # x, y, z, w
+        
+
+    def odom_cb(self, msg): # Odometry
         pass ## REMOVE AND FILL IN ##
 
+        msg.pose.pose.position # x, y, z
+        msg.pose.pose.orientation # x, y, z, w
+        msg.twist
+        
 
-    def odom_cb(self, msg):
+    def goal_cb(self, msg): # PoseStamped
         pass ## REMOVE AND FILL IN ##
 
-
-    def goal_cb(self, msg):
-        pass ## REMOVE AND FILL IN ##
+        msg.pose.position # x, y, z
+        msg.pose.orientation # x, y, z, w
 
     def plan_path(self, start_point, end_point, map):
         ## CODE FOR PATH PLANNING ##
 
         # publish trajectory
-        self.traj_pub.publish(self.trajectory.toPoseArray())
+        self.traj_pub.publish(self.trajectory.toPoseArray()) 
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
