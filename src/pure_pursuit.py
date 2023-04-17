@@ -11,6 +11,7 @@ from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header
+from driver_pursuit import PursuitController
 
 class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -24,7 +25,7 @@ class PurePursuit(object):
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size = 1)
-        self.nearest_pt_sub = rospy.Publisher("/nearest_point", PointStamped, queue_size=1)
+        self.nearest_pt_sub = rospy.Publisher("/lookaheadpoint", PointStamped, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
 
 
@@ -117,4 +118,5 @@ class PurePursuit(object):
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
     pf = PurePursuit()
+    df = PursuitController()
     rospy.spin()
