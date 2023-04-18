@@ -8,6 +8,7 @@ import rospkg
 import random
 import time, os
 import skimage
+import skimage.morphology
 from utils import LineTrajectory
 
 
@@ -200,6 +201,10 @@ def make_occupancy_graph(data, width, height):
     for i in range(len(data)):
         if data[i] == -1:
             data[i] == 100
+        elif data[i] > 5:
+            data[i] == 100
+        else:
+            data[i] == 0
 
     img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
 
