@@ -37,7 +37,7 @@ class PathPlan(object):
         msg.info.origin.position  # x, y, z
         msg.info.origin.orientation  # x, y, z, w
 
-        (self.graph, self.occupancy) = self.make_occupancy_graph(msg.data)
+        (self.graph, self.occupancy) = make_occupancy_graph(msg.data)
 
     def odom_cb(self, msg):  # Odometry
         pass  ## REMOVE AND FILL IN ##
@@ -147,57 +147,127 @@ class PathPlan(object):
                     open_nodes.append((f_score, neighbor))
                     parents[neighbor] = current
 
-        # If we have exhausted all possible paths and have not found the goal node, return None
-        return None
+            # If we have exhausted all possible paths and have not found the goal node, return None
+            return None
         
+        else: # sampling based method / PRM
+            width = self.occupancy[0].size # self.occupancy is a 2d numpy array where array[y][x]
+            height = self.occupancy.size / width;
+
+            points = [] # find random points
+            for i in range(100):
+                width = numpy.random.randint(0, width-1)
+                height = numpy.random.randint(0, height-1)
+                points.append((width, height))
+
+            valid_points = [] # make sure they are valid
+            for x, y in points:
+                if self.occupancy[y, x] == True:
+                    valid_points.append((x, y))
+            
+            adjacency_graph = {point: [] for point in valid_points}
+            for index, first_point in enumerate(valid_points): # draw edges
+                for second_point in valid_points[index+1:]:
+                    slope = float(second_point[1] - first_point[1]) / (second_point[0] - first_point[0]) # find equation for line
+                    b = first_point[1] - slope * first_point[0]
+
+                    isCollision = False
+                    for x_val in range(first_point[0], second_point[0]):
+                        y_val = slope * x_val + b
+                        if self.occupancy[y_val, x_val] == False:
+                            isCollision = True
+                            break
+                    
+                    if not isCollision:
+                        adjacency_graph[first_point].append(second_point)
+                        adjacency_graph[second_point].append(first_point)
+
+
+            return adjacency_graph
+                    # find equation of line
+                    # check to see if any discrete x values of line are in bad area
+
+            return None
+
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
 
-    def make_occupancy_graph(data):
-        img = skimage.color.rgb2gray(data)
 
-        width = len(img[0])
-        height = len(img)
+def make_occupancy_graph(data):
+    img = skimage.color.rgb2gray(data)
 
-        # print(width, height)
+    width = len(img[0])
+    height = len(img)
 
-        globalthreshold = skimage.filters.threshold_otsu(img)
-        basement = img > globalthreshold
-        footprint = skimage.morphology.disk(10)
-        basement = skimage.morphology.erosion(basement, footprint)
-        # basement = skimage.util.img_as_ubyte(basement)
-        # print(basement[1000][1000])
+    # print(width, height)
 
-        vertices = set()
-        while len(vertices) < 2000:
-            (x, y) = (random.randrange(width), random.randrange(height))
-            if basement[y][x] == True:
-                vertices.add((x, y))
-                # basement[y][x] = 124
+    globalthreshold = skimage.filters.threshold_otsu(img)
+    basement = img > globalthreshold
+    footprint = skimage.morphology.disk(10)
+    basement = skimage.morphology.erosion(basement, footprint)
+    # basement = skimage.util.img_as_ubyte(basement)
+    # print(basement[1000][1000])
 
-        adjacency = {}
-        for x, y in vertices:
-            nearest = {}
-            num_taken = 8
-            for i, j in vertices:
-                dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
-                if len(nearest) < num_taken:
+    vertices = set()
+    while len(vertices) < 4000:
+        (x, y) = (random.randrange(width), random.randrange(height))
+        if basement[y][x] == True:
+            vertices.add((x, y))
+            # basement[y][x] = 124
+
+    adjacency = {}
+    for x, y in vertices:
+        nearest = {}
+        num_taken = 20
+        for i, j in vertices:
+            dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
+            if len(nearest) < num_taken:
+                nearest[(i, j)] = dist
+            else:
+                cur_max = max(nearest, key=nearest.get)
+
+                if nearest[cur_max] > dist:
                     nearest[(i, j)] = dist
-                else:
-                    cur_max = max(nearest, key=nearest.get)
+                    del nearest[cur_max]
 
-                    if nearest[cur_max] > dist:
-                        nearest[(i, j)] = dist
-                        del nearest[cur_max]
+        del nearest[min(nearest, key=nearest.get)]
 
-            del nearest[min(nearest, key=nearest.get)]
-            adjacency[(x, y)] = nearest
-        # print(adjacency)
-        # skimage.io.imsave("stata_basement_thresh.png", basement)
-        return (adjacency, basement)
+        remove_these = set()
+        for i, j in nearest:
+            line_pixels = create_line(x, y, i, j)
+            # print(line_pixels)
+            # collision = False
+            for x_pos, y_pos in line_pixels:
+                if basement[y_pos][x_pos] == False:
+                    remove_these.add((i, j))
+                    # collision = True
+                    break
+            """ if not collision:
+                for x_pos, y_pos in line_pixels:
+                    basement[y_pos][x_pos] = 20 """
+
+        for pos in remove_these:
+            del nearest[pos]
+
+        adjacency[(x, y)] = nearest
+    # print(adjacency)
+    # skimage.io.imsave("stata_basement_thresh.png", basement)
+    return (adjacency, basement)
+
+
+def create_line(x, y, i, j):
+    pixels = set()
+    for x_val in range(x, i):
+        y_found = (((j - y) / (i - x)) * (x_val - x)) + y
+        pixels.add((x_val, int(y_found)))
+    for y_val in range(y, j):
+        x_found = (((i - x) / (j - y)) * (y_val - y)) + x
+        pixels.add((int(x_found), y_val))
+
+    return pixels
 
 
 if __name__ == "__main__":
