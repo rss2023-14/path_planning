@@ -68,10 +68,6 @@ class PurePursuit(object):
 
         #put a condition to make l2 = epsilon wherever it is equal to 0
         l2 = np.where(l2 == 0, 0.001, l2)
-
-        rospy.logerr(np.shape(position))
-        rospy.logerr(np.shape(start_points))
-        rospy.logerr(np.shape(end_points))
         t = np.clip(np.sum((position - start_points) * (end_points - start_points), axis=1)/l2, 0, 1)
         projection = start_points + (t * (end_points - start_points).T).T
         distance = np.linalg.norm(position - projection, axis=1)

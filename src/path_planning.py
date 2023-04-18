@@ -17,7 +17,7 @@ class PathPlan(object):
     """
 
     def __init__(self):
-        rospy.logerr("initializing")
+        rospy.loginfo("initializing")
         self.graph = None
         self.occupancy = None
 
@@ -32,18 +32,18 @@ class PathPlan(object):
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
-        rospy.logerr("initialized!")
+        rospy.loginfo("initialized!")
 
     def map_cb(self, msg):  # Occupancy Grid
-        msg.data  # int array, row major order, starting with 0,0, probabilties in range of 0, 100
-        skimage.io.imsave("stata_basement_occupancy.png", msg.data)
-        msg.info.width  # int
-        msg.info.height  # int
-        msg.info.origin.position  # x, y, z
-        msg.info.origin.orientation  # x, y, z, w
+        # msg.data  # int array, row major order, starting with 0,0, probabilties in range of 0, 100
+        # msg.info.width  # int
+        # msg.info.height  # int
+        # msg.info.origin.position  # x, y, z
+        # msg.info.origin.orientation  # x, y, z, w
 
+        skimage.io.imsave("stata_basement_occupancy.png", msg.data)
         (self.graph, self.occupancy) = make_occupancy_graph(msg.data)
-        rospy.logerr("graph made!")
+        rospy.loginfo("graph made!")
 
     def odom_cb(self, msg):  # Odometry
         p = msg.pose.pose.position  # x, y, z
@@ -56,12 +56,12 @@ class PathPlan(object):
         """
         Get goal point, and initiate path planning to follow!
         """
-        rospy.logerr("got a goal!")
+        rospy.loginfo("got a goal!")
         if self.current_pose is None:
-            rospy.logerr("Odom not initialized yet!")
+            rospy.loginfo("Odom not initialized yet!")
             return
         elif self.graph is None:
-            rospy.logerr("Graph not initialized yet!")
+            rospy.loginfo("Graph not initialized yet!")
             return
 
         sp = self.current_pose
@@ -129,7 +129,7 @@ class PathPlan(object):
     def plan_path(self, start_point, end_point, map):
         ## Assume we have heuristic function called 'heuristic' which takes in (start,end)
         # Assume map is a dictionary of nodes and each of their neighbors with associated distance in a len 2 tuple
-        rospy.logerr("planning path!")
+        rospy.loginfo("planning path!")
 
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
