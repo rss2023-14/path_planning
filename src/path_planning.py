@@ -5,45 +5,52 @@ import numpy as np
 from geometry_msgs.msg import PoseStamped, PoseArray
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
+import random
 import time, os
+import skimage
 from utils import LineTrajectory
 
+
 class PathPlan(object):
-    """ Listens for goal pose published by RViz and uses it to plan a path from
+    """Listens for goal pose published by RViz and uses it to plan a path from
     current car pose.
     """
+
     def __init__(self):
+        self.graph = None
+        self.occupancy = None
         self.odom_topic = rospy.get_param("~odom_topic")
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
-        self.goal_sub = rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10)
+        self.goal_sub = rospy.Subscriber(
+            "/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10
+        )
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
 
-
-    def map_cb(self, msg): # Occupancy Grid
+    def map_cb(self, msg):  # Occupancy Grid
         pass
 
-        msg.data # int array, row major order, starting with 0,0, probabilties in range of 0, 100
-        msg.info.width # int
-        msg.info.height #int
-        msg.info.origin.position # x, y, z
-        msg.info.origin.orientation # x, y, z, w
-        
+        msg.data  # int array, row major order, starting with 0,0, probabilties in range of 0, 100
+        msg.info.width  # int
+        msg.info.height  # int
+        msg.info.origin.position  # x, y, z
+        msg.info.origin.orientation  # x, y, z, w
 
-    def odom_cb(self, msg): # Odometry
-        pass ## REMOVE AND FILL IN ##
+        (self.graph, self.occupancy) = self.make_occupancy_graph(msg.data)
 
-        msg.pose.pose.position # x, y, z
-        msg.pose.pose.orientation # x, y, z, w
+    def odom_cb(self, msg):  # Odometry
+        pass  ## REMOVE AND FILL IN ##
+
+        msg.pose.pose.position  # x, y, z
+        msg.pose.pose.orientation  # x, y, z, w
         msg.twist
-        
 
-    def goal_cb(self, msg): # PoseStamped
-        pass ## REMOVE AND FILL IN ##
+    def goal_cb(self, msg):  # PoseStamped
+        pass  ## REMOVE AND FILL IN ##
 
-        msg.pose.position # x, y, z
-        msg.pose.orientation # x, y, z, w
+        msg.pose.position  # x, y, z
+        msg.pose.orientation  # x, y, z, w
 
     def plan_path(self, start_point, end_point, map):
         ## Assume we have heuristic function called 'heuristic' which takes in (start,end)
@@ -105,16 +112,57 @@ class PathPlan(object):
         # If we have exhausted all possible paths and have not found the goal node, return None
         return None
 
-
-
         # publish trajectory
-        self.traj_pub.publish(self.trajectory.toPoseArray()) 
+        self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
 
+    def make_occupancy_graph(data):
+        img = skimage.color.rgb2gray(data)
 
-if __name__=="__main__":
+        width = len(img[0])
+        height = len(img)
+
+        # print(width, height)
+
+        globalthreshold = skimage.filters.threshold_otsu(img)
+        basement = img > globalthreshold
+        footprint = skimage.morphology.disk(10)
+        basement = skimage.morphology.erosion(basement, footprint)
+        # basement = skimage.util.img_as_ubyte(basement)
+        # print(basement[1000][1000])
+
+        vertices = set()
+        while len(vertices) < 2000:
+            (x, y) = (random.randrange(width), random.randrange(height))
+            if basement[y][x] == True:
+                vertices.add((x, y))
+                # basement[y][x] = 124
+
+        adjacency = {}
+        for x, y in vertices:
+            nearest = {}
+            num_taken = 8
+            for i, j in vertices:
+                dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
+                if len(nearest) < num_taken:
+                    nearest[(i, j)] = dist
+                else:
+                    cur_max = max(nearest, key=nearest.get)
+
+                    if nearest[cur_max] > dist:
+                        nearest[(i, j)] = dist
+                        del nearest[cur_max]
+
+            del nearest[min(nearest, key=nearest.get)]
+            adjacency[(x, y)] = nearest
+        # print(adjacency)
+        # skimage.io.imsave("stata_basement_thresh.png", basement)
+        return (adjacency, basement)
+
+
+if __name__ == "__main__":
     rospy.init_node("path_planning")
     pf = PathPlan()
     rospy.spin()
