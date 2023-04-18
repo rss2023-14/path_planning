@@ -17,16 +17,22 @@ class PathPlan(object):
     """
 
     def __init__(self):
+        rospy.logerr("initializing")
         self.graph = None
         self.occupancy = None
+
         self.odom_topic = rospy.get_param("~odom_topic")
-        self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
-        self.trajectory = LineTrajectory("/planned_trajectory")
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
+        self.current_pose = None
+
         self.goal_sub = rospy.Subscriber(
             "/move_base_simple/goal", PoseStamped, self.goal_cb, queue_size=10
         )
+
+        self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
+        self.trajectory = LineTrajectory("/planned_trajectory")
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
-        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
+        rospy.logerr("initialized!")
 
     def map_cb(self, msg):  # Occupancy Grid
         pass
@@ -38,23 +44,38 @@ class PathPlan(object):
         msg.info.origin.orientation  # x, y, z, w
 
         (self.graph, self.occupancy) = self.make_occupancy_graph(msg.data)
+        rospy.logerr("graph made!")
 
     def odom_cb(self, msg):  # Odometry
-        pass  ## REMOVE AND FILL IN ##
+        p = msg.pose.pose.position  # x, y, z
+        o = msg.pose.pose.orientation  # x, y, z, w
+        t = msg.twist
 
-        msg.pose.pose.position  # x, y, z
-        msg.pose.pose.orientation  # x, y, z, w
-        msg.twist
+        self.current_pose = [p.x, p.y] # Only do (x,y)
 
     def goal_cb(self, msg):  # PoseStamped
-        pass  ## REMOVE AND FILL IN ##
+        """
+        Get goal point, and initiate path planning to follow!
+        """
+        rospy.logerr("got a goal!")
+        if self.current_pose is None:
+            rospy.logerr("Odom not initialized yet!")
+            return
+        elif self.graph is None:
+            rospy.logerr("Graph not initialized yet!")
+            return
 
-        msg.pose.position  # x, y, z
-        msg.pose.orientation  # x, y, z, w
+        sp = self.current_pose
+        so = [0, 0, 0, 0]
+        gp = msg.pose.position  # x, y, z
+        go = msg.pose.orientation  # x, y, z, w
+
+        path = self.plan_path(sp, [gp.x, gp.y], self.graph)
 
     def plan_path(self, start_point, end_point, map):
         ## Assume we have heuristic function called 'heuristic' which takes in (start,end)
         # Assume map is a dictionary of nodes and each of their neighbors with associated distance in a len 2 tuple
+        rospy.logerr("planning path!")
 
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
@@ -118,7 +139,7 @@ class PathPlan(object):
         # visualize trajectory Markers
         self.trajectory.publish_viz()
 
-    def make_occupancy_graph(data):
+    def make_occupancy_graph(self, data):
         img = skimage.color.rgb2gray(data)
 
         width = len(img[0])
