@@ -41,8 +41,10 @@ class PathPlan(object):
         # msg.info.origin.position  # x, y, z
         # msg.info.origin.orientation  # x, y, z, w
 
-        skimage.io.imsave("stata_basement_occupancy.png", msg.data)
-        (self.graph, self.occupancy) = make_occupancy_graph(msg.data)
+        # skimage.io.imsave("stata_basement_occupancy.png", msg.data)
+        (self.graph, self.occupancy) = make_occupancy_graph(
+            msg.data, msg.info.width, msg.info.height
+        )
         rospy.loginfo("graph made!")
 
     def odom_cb(self, msg):  # Odometry
@@ -194,13 +196,12 @@ class PathPlan(object):
         self.trajectory.publish_viz()
 
 
-def make_occupancy_graph(data):
-    for i in range(data):
-        for j in range(data[0]):
-            if data[i][j] == -1:
-                data[i][j] = 100
+def make_occupancy_graph(data, width, height):
+    for i in range(len(data)):
+        if data[i] == -1:
+            data[i] == 100
 
-    img = skimage.color.rgb2gray(data)
+    img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
 
     width = len(img[0])
     height = len(img)
