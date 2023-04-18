@@ -162,15 +162,15 @@ def make_occupancy_graph(data):
         for i, j in nearest:
             line_pixels = create_line(x, y, i, j)
             # print(line_pixels)
-            collision = False
+            # collision = False
             for x_pos, y_pos in line_pixels:
-                if basement[y_pos][x_pos] == 0:
+                if basement[y_pos][x_pos] == False:
                     remove_these.add((i, j))
-                    collision = True
+                    # collision = True
                     break
-            if not collision:
+            """ if not collision:
                 for x_pos, y_pos in line_pixels:
-                    basement[y_pos][x_pos] = 20
+                    basement[y_pos][x_pos] = 20 """
 
         for pos in remove_these:
             del nearest[pos]
