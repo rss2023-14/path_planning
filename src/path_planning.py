@@ -74,7 +74,7 @@ class PathPlan(object):
 
         path = self.plan_path(sp, [gp.x, gp.y], self.graph)
 
-    def create_sampled_graph(
+    def create_sampled_graph( # returns a graph in the form { (x1, y1) : [(x2, y2), (x3, y3)] }
         self, start_point, end_point, map
     ):  # sampling based method / PRM
         width = self.occupancy[
