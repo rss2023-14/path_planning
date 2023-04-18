@@ -44,7 +44,7 @@ class PathPlan(object):
 
         # skimage.io.imsave("stata_basement_occupancy.png", msg.data)
         (self.graph, self.occupancy) = make_occupancy_graph(
-            msg.data, msg.info.width, msg.info.height
+            np.array(msg.data), msg.info.width, msg.info.height
         )
         rospy.loginfo("graph made!")
 
@@ -53,7 +53,7 @@ class PathPlan(object):
         o = msg.pose.pose.orientation  # x, y, z, w
         t = msg.twist
 
-        self.current_pose = [p.x, p.y]  # Only do (x,y)
+        self.current_pose = (p.x, p.y)  # Only do (x,y)
 
     def goal_cb(self, msg):  # PoseStamped
         """
@@ -68,11 +68,11 @@ class PathPlan(object):
             return
 
         sp = self.current_pose
-        so = [0, 0, 0, 0]
+        so = (0, 0, 0, 0)
         gp = msg.pose.position  # x, y, z
         go = msg.pose.orientation  # x, y, z, w
 
-        path = self.plan_path(sp, [gp.x, gp.y], self.graph)
+        path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
     def create_sampled_graph(
         self, start_point, end_point, map
@@ -200,11 +200,11 @@ class PathPlan(object):
 def make_occupancy_graph(data, width, height):
     for i in range(len(data)):
         if data[i] == -1:
-            data[i] == 100
+            data[i] = 100
         elif data[i] > 5:
-            data[i] == 100
+            data[i] = 100
         else:
-            data[i] == 0
+            data[i] = 0
 
     img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
 
