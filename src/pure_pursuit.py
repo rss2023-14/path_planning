@@ -41,6 +41,11 @@ class PurePursuit(object):
         self.pose = odom.pose.pose
         current_robot_position = np.array([self.pose.position.x, self.pose.position.y])
         #current_traj_point = np.array([self.trajectory.points[0], self.trajectory.points[1]])
+
+        if len(self.trajectory.points) == 0:
+            rospy.loginfo("no points")
+            return
+
         projection, min_dist_index = self.min_distance(self.trajectory.points, current_robot_position)
         lookahead = self.find_lookahead(min_dist_index, current_robot_position)
         #publish projection onto rviz 
@@ -57,9 +62,16 @@ class PurePursuit(object):
         end_points = np.roll(start_points, -1, axis=0)
         start_points = start_points[:-1]
         end_points = end_points[:-1]
-        l2 = np.linalg.norm(start_points - end_points, axis=1)**2 #distances between every two pair of points 
+
+        l2 = np.linalg.norm(start_points - end_points, axis=1)**2 #distances between every two pair of points
+        # l2 = np.linalg.norm(start_points - end_points, axis=0)**2 #distances between every two pair of points
+
         #put a condition to make l2 = epsilon wherever it is equal to 0
         l2 = np.where(l2 == 0, 0.001, l2)
+
+        rospy.logerr(np.shape(position))
+        rospy.logerr(np.shape(start_points))
+        rospy.logerr(np.shape(end_points))
         t = np.clip(np.sum((position - start_points) * (end_points - start_points), axis=1)/l2, 0, 1)
         projection = start_points + (t * (end_points - start_points).T).T
         distance = np.linalg.norm(position - projection, axis=1)
