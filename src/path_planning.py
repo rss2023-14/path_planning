@@ -51,7 +51,7 @@ class PathPlan(object):
         o = msg.pose.pose.orientation  # x, y, z, w
         t = msg.twist
 
-        self.current_pose = [p.x, p.y] # Only do (x,y)
+        self.current_pose = [p.x, p.y]  # Only do (x,y)
 
     def goal_cb(self, msg):  # PoseStamped
         """
@@ -72,41 +72,58 @@ class PathPlan(object):
 
         path = self.plan_path(sp, [gp.x, gp.y], self.graph)
 
-    def create_sampled_graph(self, start_point, end_point, map): # sampling based method / PRM
-        width = self.occupancy[0].size # self.occupancy is a 2d numpy array where array[y][x]
-        height = self.occupancy.size / width; # should be integer
+    def create_sampled_graph(
+        self, start_point, end_point, map
+    ):  # sampling based method / PRM
+        width = self.occupancy[
+            0
+        ].size  # self.occupancy is a 2d numpy array where array[y][x]
+        height = self.occupancy.size / width
+        # should be integer
 
-        points = [start_point, end_point] # put start and end point in the list in the form of (width, height) tuples
-        for i in range(100): # find random points
-            x_rand_point = numpy.random.randint(0, width-1)
-            y_rand_point = numpy.random.randint(0, height-1)
+        points = [
+            start_point,
+            end_point,
+        ]  # put start and end point in the list in the form of (width, height) tuples
+        for i in range(100):  # find random points
+            x_rand_point = np.random.randint(0, width - 1)
+            y_rand_point = np.random.randint(0, height - 1)
             points.append((x_rand_point, y_rand_point))
 
-        valid_points = [] 
-        for x, y in points: # make sure sampled points are not inside obstacles
-            if self.occupancy[y, x] == True: # True means they are not inside obstacle
+        valid_points = []
+        for x, y in points:  # make sure sampled points are not inside obstacles
+            if self.occupancy[y, x] == True:  # True means they are not inside obstacle
                 valid_points.append((x, y))
 
-        assert(start_point in valid_points) # make sure start_point & end_point are in correct form
-        assert(end_point in valid_points)
-            
+        assert (
+            start_point in valid_points
+        )  # make sure start_point & end_point are in correct form
+        assert end_point in valid_points
+
         adjacency_graph = {point: [] for point in valid_points}
-        for index, first_point in enumerate(valid_points): # find all permutations of points
-            for second_point in valid_points[index+1:]:
-                slope = float(second_point[1] - first_point[1]) / (second_point[0] - first_point[0]) # find equation for line
+        for index, first_point in enumerate(
+            valid_points
+        ):  # find all permutations of points
+            for second_point in valid_points[index + 1 :]:
+                slope = float(second_point[1] - first_point[1]) / (
+                    second_point[0] - first_point[0]
+                )  # find equation for line
                 b = first_point[1] - slope * first_point[0]
 
                 isCollision = False
-                for x_val in range(first_point[0], second_point[0]): # check to see if any discrete x values of line are in bad area
+                for x_val in range(
+                    first_point[0], second_point[0]
+                ):  # check to see if any discrete x values of line are in bad area
                     y_val = slope * x_val + b
-                    if self.occupancy[y_val, x_val] == False: # if one of the points on the line is in an obstacle, dont add to adjacency graph
+                    if (
+                        self.occupancy[y_val, x_val] == False
+                    ):  # if one of the points on the line is in an obstacle, dont add to adjacency graph
                         isCollision = True
                         break
-                
+
                 if not isCollision:
                     adjacency_graph[first_point].append(second_point)
                     adjacency_graph[second_point].append(first_point)
-
 
         return adjacency_graph
 
@@ -179,7 +196,7 @@ class PathPlan(object):
 
 
 def make_occupancy_graph(data):
-    img = skimage.color.rgb2gray(data)
+    img = skimage.color.rgb2gray(np.array(data))
 
     width = len(img[0])
     height = len(img)
@@ -194,7 +211,7 @@ def make_occupancy_graph(data):
     # print(basement[1000][1000])
 
     vertices = set()
-    while len(vertices) < 4000:
+    while len(vertices) < 1000:
         (x, y) = (random.randrange(width), random.randrange(height))
         if basement[y][x] == True:
             vertices.add((x, y))
