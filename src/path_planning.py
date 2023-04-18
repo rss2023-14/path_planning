@@ -147,47 +147,8 @@ class PathPlan(object):
                     open_nodes.append((f_score, neighbor))
                     parents[neighbor] = current
 
-            # If we have exhausted all possible paths and have not found the goal node, return None
-            return None
-        
-        else: # sampling based method / PRM
-            width = self.occupancy[0].size # self.occupancy is a 2d numpy array where array[y][x]
-            height = self.occupancy.size / width;
-
-            points = [] # find random points
-            for i in range(100):
-                width = numpy.random.randint(0, width-1)
-                height = numpy.random.randint(0, height-1)
-                points.append((width, height))
-
-            valid_points = [] # make sure they are valid
-            for x, y in points:
-                if self.occupancy[y, x] == True:
-                    valid_points.append((x, y))
-            
-            adjacency_graph = {point: [] for point in valid_points}
-            for index, first_point in enumerate(valid_points): # draw edges
-                for second_point in valid_points[index+1:]:
-                    slope = float(second_point[1] - first_point[1]) / (second_point[0] - first_point[0]) # find equation for line
-                    b = first_point[1] - slope * first_point[0]
-
-                    isCollision = False
-                    for x_val in range(first_point[0], second_point[0]):
-                        y_val = slope * x_val + b
-                        if self.occupancy[y_val, x_val] == False:
-                            isCollision = True
-                            break
-                    
-                    if not isCollision:
-                        adjacency_graph[first_point].append(second_point)
-                        adjacency_graph[second_point].append(first_point)
-
-
-            return adjacency_graph
-                    # find equation of line
-                    # check to see if any discrete x values of line are in bad area
-
-            return None
+        # If we have exhausted all possible paths and have not found the goal node, return None
+        return None
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
