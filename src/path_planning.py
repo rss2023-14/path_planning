@@ -35,9 +35,8 @@ class PathPlan(object):
         rospy.logerr("initialized!")
 
     def map_cb(self, msg):  # Occupancy Grid
-        pass
-
         msg.data  # int array, row major order, starting with 0,0, probabilties in range of 0, 100
+        skimage.io.imsave("stata_basement_occupancy.png", msg.data)
         msg.info.width  # int
         msg.info.height  # int
         msg.info.origin.position  # x, y, z
