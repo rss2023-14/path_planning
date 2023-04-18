@@ -195,7 +195,12 @@ class PathPlan(object):
 
 
 def make_occupancy_graph(data):
-    img = skimage.color.rgb2gray(np.array(data))
+    for i in range(data):
+        for j in range(data[0]):
+            if data[i][j] == -1:
+                data[i][j] = 100
+
+    img = skimage.color.rgb2gray(data)
 
     width = len(img[0])
     height = len(img)
