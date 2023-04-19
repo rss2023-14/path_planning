@@ -276,7 +276,7 @@ class PathPlan(object):
         return (world_frame_adj, occupancy_grid)
 
     def add_node(self, x, y):
-        nearest = find_nearest_nodes(x, y, self.graph, self.occupancy, 20)
+        nearest = find_nearest_nodes(x, y, self.graph, self.occupancy, 20, True)
 
         self.graph[(x, y)] = nearest
 
