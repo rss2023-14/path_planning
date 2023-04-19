@@ -57,7 +57,7 @@ class PathPlan(object):
         self.translation = msg.info.origin.position
 
         # skimage.io.imsave("stata_basement_occupancy.png", msg.data)
-        (self.graph, self.occupancy) = make_occupancy_graph(
+        (self.graph, self.occupancy) = self.make_occupancy_graph(
             np.array(msg.data), msg.info.width, msg.info.height
         )
         rospy.loginfo("graph made!")
@@ -219,77 +219,86 @@ class PathPlan(object):
 
         return (result[0, 0], result[0, 1])
 
-
-def make_occupancy_graph(data, width, height):
-    for i in range(len(data)):
-        if data[i] == -1:
-            data[i] = 100
-        elif data[i] > 5:
-            data[i] = 100
-        else:
-            data[i] = 0
-
-    img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
-
-    width = len(img[0])
-    height = len(img)
-
-    ## add in the start and end nodes
-
-    # print(width, height)
-
-    globalthreshold = skimage.filters.threshold_otsu(img)
-    basement = img > globalthreshold
-    footprint = skimage.morphology.disk(10)
-    basement = skimage.morphology.erosion(basement, footprint)
-    # basement = skimage.util.img_as_ubyte(basement)
-    # print(basement[1000][1000])
-
-    vertices = {(834, 527)}
-    while len(vertices) < 1000:
-        (x, y) = (random.randrange(width), random.randrange(height))
-        if basement[y][x] == True:
-            vertices.add((x, y))
-            # basement[y][x] = 124
-
-    adjacency = {}
-    for x, y in vertices:
-        nearest = {}
-        num_taken = 20
-        for i, j in vertices:
-            dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
-            if len(nearest) < num_taken:
-                nearest[(i, j)] = dist
+    def make_occupancy_graph(self, data, width, height):
+        for i in range(len(data)):
+            if data[i] == -1:
+                data[i] = 100
+            elif data[i] > 5:
+                data[i] = 100
             else:
-                cur_max = max(nearest, key=nearest.get)
+                data[i] = 0
 
-                if nearest[cur_max] > dist:
+        img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
+
+        width = len(img[0])
+        height = len(img)
+
+        ## add in the start and end nodes
+
+        # print(width, height)
+
+        globalthreshold = skimage.filters.threshold_otsu(img)
+        basement = img > globalthreshold
+        footprint = skimage.morphology.disk(10)
+        basement = skimage.morphology.erosion(basement, footprint)
+        # basement = skimage.util.img_as_ubyte(basement)
+        # print(basement[1000][1000])
+
+        vertices = {(834, 527)}
+        while len(vertices) < 1000:
+            (x, y) = (random.randrange(width), random.randrange(height))
+            if basement[y][x] == True:
+                vertices.add((x, y))
+                # basement[y][x] = 124
+
+        adjacency = {}
+        for x, y in vertices:
+            nearest = {}
+            num_taken = 20
+            for i, j in vertices:
+                dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
+                if len(nearest) < num_taken:
                     nearest[(i, j)] = dist
-                    del nearest[cur_max]
+                else:
+                    cur_max = max(nearest, key=nearest.get)
 
-        del nearest[min(nearest, key=nearest.get)]
+                    if nearest[cur_max] > dist:
+                        nearest[(i, j)] = dist
+                        del nearest[cur_max]
 
-        remove_these = set()
-        for i, j in nearest:
-            line_pixels = create_line(x, y, i, j)
-            # print(line_pixels)
-            # collision = False
-            for x_pos, y_pos in line_pixels:
-                if basement[y_pos][x_pos] == False:
-                    remove_these.add((i, j))
-                    # collision = True
-                    break
-            """ if not collision:
+            del nearest[min(nearest, key=nearest.get)]
+
+            remove_these = set()
+            for i, j in nearest:
+                line_pixels = create_line(x, y, i, j)
+                # print(line_pixels)
+                # collision = False
                 for x_pos, y_pos in line_pixels:
-                    basement[y_pos][x_pos] = 20 """
+                    if basement[y_pos][x_pos] == False:
+                        remove_these.add((i, j))
+                        # collision = True
+                        break
+                """ if not collision:
+                    for x_pos, y_pos in line_pixels:
+                        basement[y_pos][x_pos] = 20 """
 
-        for pos in remove_these:
-            del nearest[pos]
+            for pos in remove_these:
+                del nearest[pos]
 
-        adjacency[(x, y)] = nearest
-    # print(adjacency)
-    # skimage.io.imsave("stata_basement_thresh.png", basement)
-    return (adjacency, basement)
+            adjacency[(x, y)] = nearest
+
+        world_frame_adj = {}
+        for x, y in adjacency:
+            adjacent = {}
+            for i, j in adjacency[(x, y)]:
+                adjacent[self.pixel_to_world(i, j)] = (
+                    adjacency[(x, y)][(i, j)] * self.resolution
+                )
+            world_frame_adj[self.pixel_to_world(x, y)] = adjacent
+
+        # print(adjacency)
+        # skimage.io.imsave("stata_basement_thresh.png", basement)
+        return (world_frame_adj, basement)
 
 
 def create_line(x, y, i, j):
