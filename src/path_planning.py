@@ -25,6 +25,7 @@ class PathPlan(object):
 
         self.translation = None
         self.rot_matrix = None
+        self.inv_rot_matrix = None
         self.resolution = None
 
         self.odom_topic = rospy.get_param("~odom_topic")
@@ -53,6 +54,7 @@ class PathPlan(object):
         self.rot_matrix = np.matrix(
             [[cos_val, -sin_val, 0.0], [sin_val, cos_val, 0.0], [0.0, 0.0, 1.0]]
         )
+        self.inv_rot_matrix = np.linalg.inv(self.rot_matrix)
         self.resolution = msg.info.resolution
         self.translation = msg.info.origin.position
 
@@ -212,6 +214,11 @@ class PathPlan(object):
         return None
 
     def pixel_to_world(self, x, y):
+        result = np.dot(self.inv_rot_matrix, ([x, y, 0] - self.translation))
+
+        return (result[0, 0] / self.resolution, result[0, 1] / self.resolution)
+
+    def world_to_pixel(self, x, y):
         result = (
             np.dot(self.rot_matrix, [x * self.resolution, y * self.resolution, 0])
             + self.translation
@@ -238,55 +245,23 @@ class PathPlan(object):
         # print(width, height)
 
         globalthreshold = skimage.filters.threshold_otsu(img)
-        basement = img > globalthreshold
+        occupancy_grid = img > globalthreshold
         footprint = skimage.morphology.disk(10)
-        basement = skimage.morphology.erosion(basement, footprint)
-        # basement = skimage.util.img_as_ubyte(basement)
-        # print(basement[1000][1000])
+        occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
 
+        # get random sample of valid pixel locations
         vertices = {(834, 527)}
         while len(vertices) < 1000:
             (x, y) = (random.randrange(width), random.randrange(height))
-            if basement[y][x] == True:
+            if occupancy_grid[y][x] == False:
                 vertices.add((x, y))
-                # basement[y][x] = 124
 
+        # create graph from vertices
         adjacency = {}
         for x, y in vertices:
-            nearest = {}
-            num_taken = 20
-            for i, j in vertices:
-                dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
-                if len(nearest) < num_taken:
-                    nearest[(i, j)] = dist
-                else:
-                    cur_max = max(nearest, key=nearest.get)
+            adjacency[(x, y)] = find_nearest_nodes(x, y, vertices, occupancy_grid, 20)
 
-                    if nearest[cur_max] > dist:
-                        nearest[(i, j)] = dist
-                        del nearest[cur_max]
-
-            del nearest[min(nearest, key=nearest.get)]
-
-            remove_these = set()
-            for i, j in nearest:
-                line_pixels = create_line(x, y, i, j)
-                # print(line_pixels)
-                # collision = False
-                for x_pos, y_pos in line_pixels:
-                    if basement[y_pos][x_pos] == False:
-                        remove_these.add((i, j))
-                        # collision = True
-                        break
-                """ if not collision:
-                    for x_pos, y_pos in line_pixels:
-                        basement[y_pos][x_pos] = 20 """
-
-            for pos in remove_these:
-                del nearest[pos]
-
-            adjacency[(x, y)] = nearest
-
+        # transform to world frame
         world_frame_adj = {}
         for x, y in adjacency:
             adjacent = {}
@@ -297,11 +272,73 @@ class PathPlan(object):
             world_frame_adj[self.pixel_to_world(x, y)] = adjacent
 
         # print(adjacency)
-        # skimage.io.imsave("stata_basement_thresh.png", basement)
-        return (world_frame_adj, basement)
+        # skimage.io.imsave("stata_basement_thresh.png", occupancy_grid)
+        return (world_frame_adj, occupancy_grid)
+
+    def add_node(self, x, y):
+        nearest = find_nearest_nodes(x, y, self.graph, self.occupancy, 20)
+
+        self.graph[(x, y)] = nearest
+
+        for node in nearest:
+            self.graph[node][(x, y)] = nearest[node]
+
+
+def find_nearest_nodes(x, y, vertices, occupancy_grid, num_taken, world_frame=False):
+    """finds nearest valid nodes
+
+    Args:
+        x, y (float): x and y position
+        vertices (iter): verts in graph
+        occupancy_grid (2d array): binary occupancy grid
+        num_taken (int): how many connections should we try and make
+
+    Returns:
+        dict: dict mapping near node to dist from x, y
+    """
+    nearest = {}
+    for i, j in vertices:
+        dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
+        if len(nearest) < num_taken:
+            nearest[(i, j)] = dist
+        else:
+            cur_max = max(nearest, key=nearest.get)
+
+            if nearest[cur_max] > dist:
+                nearest[(i, j)] = dist
+                del nearest[cur_max]
+
+    del nearest[min(nearest, key=nearest.get)]
+
+    remove_these = set()
+    for i, j in nearest:
+        if world_frame:
+            (x_img, y_img) = PathPlan.world_to_pixel(x, y)
+            (i_img, j_img) = PathPlan.world_to_pixel(i, j)
+            line_pixels = create_line(int(x_img), int(y_img), int(i_img), int(j_img))
+        else:
+            line_pixels = create_line(x, y, i, j)
+        for x_pos, y_pos in line_pixels:
+            if occupancy_grid[y_pos][x_pos] == False:
+                remove_these.add((i, j))
+                break
+
+    for pos in remove_these:
+        del nearest[pos]
+
+    return nearest
 
 
 def create_line(x, y, i, j):
+    """finds points between two points
+
+    Args:
+        x, y (float): pos 1
+        i, j (float): pos 2
+
+    Returns:
+        set: points between
+    """
     pixels = set()
     for x_val in range(x, i):
         y_found = (((j - y) / (i - x)) * (x_val - x)) + y
