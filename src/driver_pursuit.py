@@ -25,12 +25,17 @@ class PursuitController():
         # self.error_pub = rospy.Publisher("/parking_error",
         #                                  ParkingError, queue_size=10)
 
-        self.parking_distance = 0 # meters; try playing with this number!
+        # Controller parameters
+        self.SPEED = rospy.get_param("speed", 2.0)
+        self.Kp = rospy.get_param("kp", 0.4)
+        self.Ki = rospy.get_param("ki", 0.0)
+        self.Kd = rospy.get_param("kd", 0.01)
+
         self.relative_x = 0
         self.relative_y = 0
 
         self.prev_time = rospy.Time.now()
-
+        
         self.prev_theta_err = 0.0
         self.prev_dist_err = 0.0
 
@@ -81,10 +86,10 @@ class PursuitController():
         drive_cmd.header.stamp = rospy.Time.now()
         #drive_cmd.header.frame_id = "base_link"
 
-        drive_cmd.drive.steering_angle = 0.4 * theta_err + \
-            0.01 * d_theta_dt + 0.0 * self.running_theta_err
+        drive_cmd.drive.steering_angle = self.Kp * theta_err + \
+            self.Kd * d_theta_dt + self.Ki * self.running_theta_err
 
-        drive_cmd.drive.speed = 2.0
+        drive_cmd.drive.speed = self.SPEED
 
         drive_cmd.drive.steering_angle_velocity = 0.0
         drive_cmd.drive.acceleration = 0.0

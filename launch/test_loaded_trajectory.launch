@@ -3,9 +3,8 @@
   <include file="$(find racecar_simulator)/launch/simulate.launch"/>
 
   <!-- Run pure pursuit controller -->
-  <node pkg="lab6" type="pure_pursuit.py" name="trajectory_follower">
-    <param name="odom_topic" value="/pf/pose/odom"/>
-  </node>
+  <rosparam command="load" file="$(find lab6)/params.yaml"/>
+  <node pkg="lab6" type="pure_pursuit.py" name="trajectory_follower"/>
 
   <!-- Run particle filter -->
   <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">

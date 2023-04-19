@@ -17,18 +17,19 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.LOOKAHEAD        = 1.0
-        self.END_THRESHOLD    = 0.25
+        self.LOOKAHEAD = rospy.get_param("lookahead_distance", 1.0)
+        self.END_THRESHOLD = rospy.get_param("end_threshold", 0.25)
         self.pose = None
+        self.trajectory = utils.LineTrajectory("/followed_trajectory")
 
-        self.odom_topic       = rospy.get_param("~odom_topic", "pf/pose/odom")
-        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size = 1)
-        
-        self.trajectory  = utils.LineTrajectory("/followed_trajectory")
+        ODOM_TOPIC = rospy.get_param("~odom_topic", "/pf/pose/odom")
+        DRIVE_TOPIC = rospy.get_param("~drive_topic", "/drive")
+
+        self.odom_sub = rospy.Subscriber(ODOM_TOPIC, Odometry, self.odom_callback, queue_size = 1)    
+        self.drive_pub = rospy.Publisher(DRIVE_TOPIC, AckermannDriveStamped, queue_size=1)
+
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        
         self.nearest_pt_sub = rospy.Publisher("/lookaheadpoint", PointStamped, queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
 
     def trajectory_callback(self, msg):
         """
