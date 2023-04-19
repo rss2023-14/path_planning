@@ -214,11 +214,13 @@ class PathPlan(object):
         return None
 
     def pixel_to_world(self, x, y):
+        """takes position in image frame and returns same position in world frame"""
         result = np.dot(self.inv_rot_matrix, ([x, y, 0] - self.translation))
 
         return (result[0, 0] / self.resolution, result[0, 1] / self.resolution)
 
     def world_to_pixel(self, x, y):
+        """takes position in world frame and returns same position in pixel frame"""
         result = (
             np.dot(self.rot_matrix, [x * self.resolution, y * self.resolution, 0])
             + self.translation
@@ -227,6 +229,17 @@ class PathPlan(object):
         return (result[0, 0], result[0, 1])
 
     def make_occupancy_graph(self, data, width, height):
+        """create an eroded occupancy grid and graph of the map
+
+        Args:
+            data (1d array): occupancy grid data
+            width (int): img width
+            height (int): img height
+
+        Returns:
+            (dict of dicts, 2d array): graph and eroded occupancy grid
+        """
+
         for i in range(len(data)):
             if data[i] == -1:
                 data[i] = 100
