@@ -14,7 +14,7 @@ class PursuitController():
     """
 
     def __init__(self):
-        # rospy.loginfo("init!")
+        rospy.loginfo("init!")
 
         # set in launch file; different for simulator vs racecar
         DRIVE_TOPIC = rospy.get_param("~drive_topic", "/drive")
