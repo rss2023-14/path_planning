@@ -1,6 +1,7 @@
 import rospy
 import numpy as np
 
+from std_msgs.msg import Float64
 from ackermann_msgs.msg import AckermannDriveStamped
 from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
@@ -22,8 +23,13 @@ class PursuitController():
         self.drive_pub = rospy.Publisher(DRIVE_TOPIC, AckermannDriveStamped, queue_size=1)
         self.lookahead_sub = rospy.Subscriber("/lookaheadpoint", PointStamped, self.look_ahead_callback)
         
-        # self.error_pub = rospy.Publisher("/parking_error",
-        #                                  ParkingError, queue_size=10)
+        # Error metrics
+        self.LOOKAHEAD = rospy.get_param("lookahead_distance", 1.0)
+        self.error_pub_dist = rospy.Publisher("/tracking_error/distance", Float64, queue_size=10)
+        self.error_pub_head = rospy.Publisher("/tracking_error/heading", Float64, queue_size=10)
+        self.error_pub_avgdist = rospy.Publisher("/tracking_error/avg_distance", Float64, queue_size=10)
+        self.avg_dist_err = 0.0
+        self.total_time = 0.0
 
         # Controller parameters
         self.SPEED = rospy.get_param("speed", 2.0)
@@ -35,7 +41,8 @@ class PursuitController():
         self.relative_y = 0
 
         self.prev_time = rospy.Time.now()
-        
+        self.dt = 0.0
+
         self.prev_theta_err = 0.0
         self.prev_dist_err = 0.0
 
@@ -50,6 +57,8 @@ class PursuitController():
         time = rospy.Time.now()
 
         dt = (time - self.prev_time).to_sec()
+        self.dt = dt
+        self.total_time += dt
 
         self.prev_time = time
 
@@ -96,18 +105,23 @@ class PursuitController():
         drive_cmd.drive.jerk = 0.0
 
         self.drive_pub.publish(drive_cmd)
-        #self.error_publisher()
+        self.error_publisher()
 
-    # def error_publisher(self):
-    #     """
-    #     Publish the error between the car and the cone. We will view this
-    #     with rqt_plot to plot the success of the controller
-    #     """
-    #     error_msg = ParkingError()
+    def error_publisher(self):
+        """
+        Publish the tracking error of the car following the trajectory.
+            - Distance error
+            - Heading (orientation) error
+        """
+        error_dist = Float64()
+        error_head = Float64()
+        error_avgdist = Float64()
 
-    #     error_msg.x_error = self.relative_x
-    #     error_msg.y_error = self.relative_y
-    #     error_msg.distance_error = np.sqrt(
-    #         (self.relative_x**2.0)+(self.relative_y**2.0))
+        error_dist.data = np.sqrt(((self.relative_x-self.LOOKAHEAD)**2.0)+(self.relative_y**2.0))
+        error_head.data = np.arctan2(self.relative_y, self.relative_x)
+        self.avg_dist_err = (self.avg_dist_err*(self.total_time-self.dt) + error_dist.data)/self.total_time
+        error_avgdist.data = self.avg_dist_err
 
-    #     self.error_pub.publish(error_msg)
+        self.error_pub_dist.publish(error_dist)
+        self.error_pub_head.publish(error_head)
+        self.error_pub_avgdist.publish(error_avgdist)
