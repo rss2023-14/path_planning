@@ -152,10 +152,8 @@ class PathPlan(object):
 
         # Loop until we find the goal node or exhaust all possible paths
         while open_nodes:
-            # Sort the open nodes by their f-scores (which is the sum of the g-score and the heuristic estimate)
             open_nodes.sort()
 
-            # Get the node with the lowest f-score from the list of open nodes
             current = open_nodes.pop(0)[1]
 
             # If we have found the goal node, reconstruct the path and return it
@@ -165,6 +163,11 @@ class PathPlan(object):
                     path.append(current)
                     current = parents[current]
                 path.reverse()
+                # publish trajectory
+                self.traj_pub.publish(self.trajectory.toPoseArray())
+
+                # visualize trajectory Markers
+                self.trajectory.publish_viz()
                 return path
 
             # Add the current node to the visited set
@@ -172,7 +175,6 @@ class PathPlan(object):
 
             # Loop through the current node's neighbors
             for neighbor, distance in map[current]:
-                # If we have already visited this neighbor, skip it
                 if neighbor in visited:
                     continue
 
@@ -187,14 +189,15 @@ class PathPlan(object):
                     open_nodes.append((f_score, neighbor))
                     parents[neighbor] = current
 
-        # If we have exhausted all possible paths and have not found the goal node, return None
-        return None
-
+        #return none if no paths are found
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
+        return None
+    
+        
 
 
 def make_occupancy_graph(data, width, height):
@@ -210,6 +213,8 @@ def make_occupancy_graph(data, width, height):
 
     width = len(img[0])
     height = len(img)
+
+    ## add in the start and end nodes
 
     # print(width, height)
 
