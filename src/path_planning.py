@@ -10,6 +10,7 @@ import time, os
 import skimage
 import skimage.morphology
 from utils import LineTrajectory
+from tf.transformations import euler_from_quaternion
 
 
 class PathPlan(object):
@@ -21,6 +22,10 @@ class PathPlan(object):
         rospy.loginfo("initializing")
         self.graph = None
         self.occupancy = None
+
+        self.translation = None
+        self.rot_matrix = None
+        self.resolution = None
 
         self.odom_topic = rospy.get_param("~odom_topic")
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
@@ -41,6 +46,15 @@ class PathPlan(object):
         # msg.info.height  # int
         # msg.info.origin.position  # x, y, z
         # msg.info.origin.orientation  # x, y, z, w
+        theta = euler_from_quaternion(msg.info.origin.orientation)[2]
+        sin_val = np.sin(theta)
+        cos_val = np.cos(theta)
+
+        self.rot_matrix = np.matrix(
+            [[cos_val, -sin_val, 0.0], [sin_val, cos_val, 0.0], [0.0, 0.0, 1.0]]
+        )
+        self.resolution = msg.info.resolution
+        self.translation = msg.info.origin.position
 
         # skimage.io.imsave("stata_basement_occupancy.png", msg.data)
         (self.graph, self.occupancy) = make_occupancy_graph(
@@ -74,7 +88,7 @@ class PathPlan(object):
 
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
-    def create_sampled_graph( # returns a graph in the form { (x1, y1) : [(x2, y2), (x3, y3)] }
+    def create_sampled_graph(  # returns a graph in the form { (x1, y1) : [(x2, y2), (x3, y3)] }
         self, start_point, end_point, map
     ):  # sampling based method / PRM
         width = self.occupancy[
@@ -189,15 +203,21 @@ class PathPlan(object):
                     open_nodes.append((f_score, neighbor))
                     parents[neighbor] = current
 
-        #return none if no paths are found
+        # return none if no paths are found
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
         self.trajectory.publish_viz()
         return None
-    
-        
+
+    def pixel_to_world(self, x, y):
+        result = (
+            np.dot(self.rot_matrix, [x * self.resolution, y * self.resolution, 0])
+            + self.translation
+        )
+
+        return (result[0, 0], result[0, 1])
 
 
 def make_occupancy_graph(data, width, height):
