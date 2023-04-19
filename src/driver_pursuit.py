@@ -14,14 +14,13 @@ class PursuitController():
     """
 
     def __init__(self):
-        rospy.loginfo("init!")
-
         # set in launch file; different for simulator vs racecar
         DRIVE_TOPIC = rospy.get_param("~drive_topic", "/drive")
         ODOM_TOPIC = rospy.get_param("~odom_topic", "/pf/pose/odom")
-        self.lookahead_sub = rospy.Subscriber("/lookaheadpoint", PointStamped, self.look_ahead_callback)
+
         self.odom_sub = rospy.Subscriber(ODOM_TOPIC, Odometry, self.odom_callback)
         self.drive_pub = rospy.Publisher(DRIVE_TOPIC, AckermannDriveStamped, queue_size=1)
+        self.lookahead_sub = rospy.Subscriber("/lookaheadpoint", PointStamped, self.look_ahead_callback)
         
         # self.error_pub = rospy.Publisher("/parking_error",
         #                                  ParkingError, queue_size=10)
