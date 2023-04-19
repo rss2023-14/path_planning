@@ -245,7 +245,7 @@ def make_occupancy_graph(data, width, height):
     # basement = skimage.util.img_as_ubyte(basement)
     # print(basement[1000][1000])
 
-    vertices = set()
+    vertices = {(834, 527)}
     while len(vertices) < 1000:
         (x, y) = (random.randrange(width), random.randrange(height))
         if basement[y][x] == True:
