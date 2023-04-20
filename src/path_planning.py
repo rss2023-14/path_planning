@@ -153,7 +153,8 @@ class PathPlan(object):
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
             return abs(start[0] - end[0]) + abs(start[1] - end[1])
-
+        self.add_node(start_point[0],start_point[1])
+        self.add_node(end_point[0],end_point[1])
         # Define a dictionary to keep track of the cost of reaching each node from the start node
         g_scores = {start_point: 0}
 
