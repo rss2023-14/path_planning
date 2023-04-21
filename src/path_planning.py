@@ -2,7 +2,7 @@
 
 import rospy
 import numpy as np
-from geometry_msgs.msg import PoseStamped, PoseArray
+from geometry_msgs.msg import PoseStamped, PoseArray, Point
 from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import random
@@ -157,6 +157,7 @@ class PathPlan(object):
             - Heuristic takes (start, end) nodes
             - Assumes map is a nested dictionary of neighbors {(x1, y1): {(x2, y2): distance}}
         """
+        self.trajectory.clear()
         rospy.loginfo("Planning path...")
         # rospy.loginfo("Map to use: " + str(map))
 
@@ -193,7 +194,10 @@ class PathPlan(object):
                     current = parents[current]
                 path.reverse()
 
-                # Publish and visualize trajectory
+                # Construct trajectory
+                for node in path:
+                    p = Point(x=node[0], y=node[1], z=0)
+                    self.trajectory.addPoint(p)
                 self.traj_pub.publish(self.trajectory.toPoseArray())
                 self.trajectory.publish_viz()
 
@@ -204,11 +208,17 @@ class PathPlan(object):
             visited.add(current)
 
             # Loop through the current node's neighbors
+            rospy.loginfo("Current node: " + str(current))
+            rospy.loginfo("This node has neighbors: " + str(map[current]))
+
             for neighbor in map[current]:
                 if neighbor in visited:
                     rospy.loginfo("Already visited!")
                     continue
                 rospy.loginfo("Trying a new node! Iter " + str(i))
+                rospy.loginfo("Exploring node: " + str(neighbor))
+                d = np.linalg.norm(np.array(neighbor) - np.array(end_point))
+                rospy.loginfo("Distance to end from this node: " + str(d))
                 i += 1
 
                 # Calculate the tentative g-score for this neighbor
@@ -221,12 +231,12 @@ class PathPlan(object):
                     g_scores[neighbor] = tentative_g_score
                     f_score = tentative_g_score + heuristic(neighbor, end_point)
                     open_nodes.append((f_score, neighbor))
+                    rospy.loginfo("Appending this neighbor to open_nodes!")
                     parents[neighbor] = current
+                rospy.loginfo("Length of open_nodes: " + str(len(open_nodes)))
 
         # No path found
-        self.traj_pub.publish(self.trajectory.toPoseArray())
-        self.trajectory.publish_viz()
-        rospy.loginfo("No path found!")
+        rospy.logwarn("No path found!")
         return None
 
     def pixel_to_world(self, x, y):
@@ -292,7 +302,7 @@ class PathPlan(object):
         vertices = {(834, 527)}
         while len(vertices) < self.NUM_VERTICES:
             (x, y) = (random.randrange(width), random.randrange(height))
-            if occupancy_grid[y][x] == False:
+            if occupancy_grid[y][x] == True:
                 vertices.add((x, y))
 
         # Create graph from vertices
