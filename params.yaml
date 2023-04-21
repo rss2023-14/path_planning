@@ -3,8 +3,12 @@ drive_topic: /drive
 
 # Pure pursuit parameters
 lookahead_distance: 1.0 # meters
-end_threshold: 0.25 # meters
+end_threshold: 0.35 # meters
 speed: 4.0
 kp: 0.4
 ki: 0.0
 kd: 0.01
+
+# Path planning parameters
+num_vertices: 1000
+num_edges_per_node: 20

@@ -22,6 +22,8 @@ class PathPlan(object):
         rospy.loginfo("Initializing path planning...")
         self.graph = None
         self.occupancy = None
+        self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
+        self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
 
         self.translation = None
         self.rot_matrix = None
@@ -273,7 +275,7 @@ class PathPlan(object):
 
         # Get random sample of valid pixel locations
         vertices = {(834, 527)}
-        while len(vertices) < 1000:
+        while len(vertices) < self.NUM_VERTICES:
             (x, y) = (random.randrange(width), random.randrange(height))
             if occupancy_grid[y][x] == False:
                 vertices.add((x, y))
