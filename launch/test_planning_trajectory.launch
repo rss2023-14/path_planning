@@ -1,0 +1,19 @@
+<launch>
+  <!-- Launch racecar simulator -->
+  <include file="$(find racecar_simulator)/launch/simulate.launch"/>
+
+  <!-- Run pure pursuit controller -->
+  <rosparam command="load" file="$(find lab6)/params.yaml"/>
+  <node pkg="lab6" type="pure_pursuit.py" name="trajectory_follower"/>
+
+  <!-- Run particle filter -->
+  <node pkg="localization" type="particle_filter.py" name="particle_filter" output="screen">
+    <rosparam command="load" file="$(find localization)/params.yaml"/>
+  </node>
+
+  <!-- Launch rviz -->
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lab6)/rviz/loaded_trajectory.rviz" required="true"/>
+
+  <!-- Run path planning node -->
+  <node pkg="lab6" type="path_planning.py" name="path_planner" output="screen"/>
+</launch>
