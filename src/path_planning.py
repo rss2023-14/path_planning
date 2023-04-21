@@ -28,7 +28,7 @@ class PathPlan(object):
         self.inv_rot_matrix = None
         self.resolution = None
 
-        self.odom_topic = rospy.get_param("~odom_topic")
+        self.odom_topic = rospy.get_param("odom_topic", "/pf/pose/odom")
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         self.current_pose = None
 
@@ -47,7 +47,8 @@ class PathPlan(object):
         # msg.info.height  # int
         # msg.info.origin.position  # x, y, z
         # msg.info.origin.orientation  # x, y, z, w
-        theta = euler_from_quaternion(msg.info.origin.orientation)[2]
+        o = msg.info.origin.orientation
+        theta = euler_from_quaternion([o.x, o.y, o.z, o.w])[2]
         sin_val = np.sin(theta)
         cos_val = np.cos(theta)
 

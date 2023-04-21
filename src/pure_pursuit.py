@@ -22,8 +22,8 @@ class PurePursuit(object):
         self.pose = None
         self.trajectory = utils.LineTrajectory("/followed_trajectory")
 
-        ODOM_TOPIC = rospy.get_param("~odom_topic", "/pf/pose/odom")
-        DRIVE_TOPIC = rospy.get_param("~drive_topic", "/drive")
+        ODOM_TOPIC = rospy.get_param("odom_topic", "/pf/pose/odom")
+        DRIVE_TOPIC = rospy.get_param("drive_topic", "/drive")
 
         self.odom_sub = rospy.Subscriber(ODOM_TOPIC, Odometry, self.odom_callback, queue_size = 1)    
         self.drive_pub = rospy.Publisher(DRIVE_TOPIC, AckermannDriveStamped, queue_size=1)
