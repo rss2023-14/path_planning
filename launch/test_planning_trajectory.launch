@@ -12,7 +12,7 @@
   </node>
 
   <!-- Launch rviz -->
-  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lab6)/rviz/loaded_trajectory.rviz" required="true"/>
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lab6)/rviz/planned_trajectory.rviz" required="true"/>
 
   <!-- Run path planning node -->
   <node pkg="lab6" type="path_planning.py" name="path_planner" output="screen"/>
