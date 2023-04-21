@@ -158,6 +158,7 @@ class PathPlan(object):
             - Assumes map is a nested dictionary of neighbors {(x1, y1): {(x2, y2): distance}}
         """
         rospy.loginfo("Planning path...")
+        # rospy.loginfo("Map to use: " + str(map))
 
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
@@ -179,6 +180,7 @@ class PathPlan(object):
         open_nodes = [(heuristic(start_point, end_point), start_point)]
 
         # Loop until we find the goal node or exhaust all possible paths
+        i = 1 # Track iterations (DEBUGGING)
         while open_nodes:
             open_nodes.sort()
             current = open_nodes.pop(0)[1]
@@ -204,7 +206,10 @@ class PathPlan(object):
             # Loop through the current node's neighbors
             for neighbor in map[current]:
                 if neighbor in visited:
+                    rospy.loginfo("Already visited!")
                     continue
+                rospy.loginfo("Trying a new node! Iter " + str(i))
+                i += 1
 
                 # Calculate the tentative g-score for this neighbor
                 distance = map[current][neighbor]
@@ -221,25 +226,35 @@ class PathPlan(object):
         # No path found
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.trajectory.publish_viz()
+        rospy.loginfo("No path found!")
         return None
 
     def pixel_to_world(self, x, y):
         """
         Takes position in image frame and returns same position in world frame.
         """
-        result = np.dot(self.inv_rot_matrix, ([x, y, 0] - self.translation))
-        return (result[0, 0] / self.resolution, result[0, 1] / self.resolution)
+        # result = np.dot(self.inv_rot_matrix, ([x, y, 0] - self.translation))
+        # return (result[0, 0] / self.resolution, result[0, 1] / self.resolution)
+
+        result = np.array([x,y,0]) * self.resolution
+        result = np.dot(self.rot_matrix, result)
+        result += self.translation
+        return (result[0,0], result[0,1])
 
     def world_to_pixel(self, x, y):
         """
         Takes position in world frame and returns same position in pixel frame.
         """
-        result = (
-            np.dot(self.rot_matrix, [x * self.resolution, y * self.resolution, 0])
-            + self.translation
-        )
-
-        return (result[0, 0], result[0, 1])
+        # result = (
+        #     np.dot(self.rot_matrix, [x * self.resolution, y * self.resolution, 0])
+        #     + self.translation
+        # )
+        # return (result[0, 0], result[0, 1])
+        result = np.array([x,y,0])
+        result -= self.translation
+        result = np.dot(self.inv_rot_matrix, result)
+        result /= self.resolution
+        return (result[0,0], result[0,1])
 
     def make_occupancy_graph(self, data, width, height):
         """
@@ -283,7 +298,7 @@ class PathPlan(object):
         # Create graph from vertices
         adjacency = {}
         for x, y in vertices:
-            adjacency[(x, y)] = self.find_nearest_nodes(x, y, vertices, occupancy_grid, 20)
+            adjacency[(x, y)] = self.find_nearest_nodes(x, y, vertices, occupancy_grid, self.NUM_EDGES_PER_NODE)
 
         # Transform to world frame
         world_frame_adj = {}
@@ -301,7 +316,7 @@ class PathPlan(object):
         """
         Add node (x,y) to graph, connect edges to closest neighbors
         """
-        nearest = self.find_nearest_nodes(x, y, self.graph, self.occupancy, 20, True)
+        nearest = self.find_nearest_nodes(x, y, self.graph, self.occupancy, self.NUM_EDGES_PER_NODE, True)
         self.graph[(x, y)] = nearest
 
         for node in nearest:
