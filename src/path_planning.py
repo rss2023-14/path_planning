@@ -281,11 +281,11 @@ class PathPlan(object):
         # Reset occupancy grid values
         for i in range(len(data)):
             if data[i] == -1:
-                data[i] = 100
-            elif data[i] > 5:
-                data[i] = 100
-            else:
                 data[i] = 0
+            elif data[i] > 5:
+                data[i] = 0
+            else:
+                data[i] = 100
 
         # Construct image
         img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
@@ -302,7 +302,7 @@ class PathPlan(object):
         vertices = {(834, 527)}
         while len(vertices) < self.NUM_VERTICES:
             (x, y) = (random.randrange(width), random.randrange(height))
-            if occupancy_grid[y][x] == True:
+            if occupancy_grid[y][x]:
                 vertices.add((x, y))
 
         # Create graph from vertices
@@ -368,7 +368,7 @@ class PathPlan(object):
             else:
                 line_pixels = self.create_line(x, y, i, j)
             for x_pos, y_pos in line_pixels:
-                if occupancy_grid[y_pos][x_pos] == False:
+                if not occupancy_grid[y_pos][x_pos]:
                     remove_these.add((i, j))
                     break
 
