@@ -19,7 +19,7 @@ class PathPlan(object):
     """
 
     def __init__(self):
-        rospy.loginfo("initializing")
+        rospy.loginfo("Initializing path planning...")
         self.graph = None
         self.occupancy = None
 
@@ -39,7 +39,6 @@ class PathPlan(object):
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
         self.trajectory = LineTrajectory("/planned_trajectory")
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
-        rospy.loginfo("initialized!")
 
     def map_cb(self, msg):  # Occupancy Grid
         # msg.data  # int array, row major order, starting with 0,0, probabilties in range of 0, 100
@@ -57,13 +56,14 @@ class PathPlan(object):
         )
         self.inv_rot_matrix = np.linalg.inv(self.rot_matrix)
         self.resolution = msg.info.resolution
-        self.translation = msg.info.origin.position
+        p = msg.info.origin.position
+        self.translation = np.array([p.x, p.y, p.z])
 
         # skimage.io.imsave("stata_basement_occupancy.png", msg.data)
         (self.graph, self.occupancy) = self.make_occupancy_graph(
             np.array(msg.data), msg.info.width, msg.info.height
         )
-        rospy.loginfo("graph made!")
+        rospy.loginfo("Initialized, graph made!")
 
     def odom_cb(self, msg):  # Odometry
         p = msg.pose.pose.position  # x, y, z
@@ -76,7 +76,6 @@ class PathPlan(object):
         """
         Get goal point, and initiate path planning to follow!
         """
-        rospy.loginfo("got a goal!")
         if self.current_pose is None:
             rospy.loginfo("Odom not initialized yet!")
             return
@@ -149,7 +148,7 @@ class PathPlan(object):
     def plan_path(self, start_point, end_point, map):
         ## Assume we have heuristic function called 'heuristic' which takes in (start,end)
         # Assume map is a dictionary of nodes and each of their neighbors with associated distance in a len 2 tuple
-        rospy.loginfo("planning path!")
+        rospy.loginfo("Planning path...")
 
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
@@ -186,17 +185,19 @@ class PathPlan(object):
 
                 # visualize trajectory Markers
                 self.trajectory.publish_viz()
+                rospy.loginfo("Path found: " + str(path))
                 return path
 
             # Add the current node to the visited set
             visited.add(current)
 
             # Loop through the current node's neighbors
-            for neighbor, distance in map[current]:
+            for neighbor in map[current]:
                 if neighbor in visited:
                     continue
 
                 # Calculate the tentative g-score for this neighbor
+                distance = map[current][neighbor]
                 tentative_g_score = g_scores[current] + distance
 
                 # If we have not yet visited this neighbor, or if we have found a shorter path to it,
@@ -274,7 +275,7 @@ class PathPlan(object):
         # create graph from vertices
         adjacency = {}
         for x, y in vertices:
-            adjacency[(x, y)] = find_nearest_nodes(x, y, vertices, occupancy_grid, 20)
+            adjacency[(x, y)] = self.find_nearest_nodes(x, y, vertices, occupancy_grid, 20)
 
         # transform to world frame
         world_frame_adj = {}
@@ -291,7 +292,7 @@ class PathPlan(object):
         return (world_frame_adj, occupancy_grid)
 
     def add_node(self, x, y):
-        nearest = find_nearest_nodes(x, y, self.graph, self.occupancy, 20, True)
+        nearest = self.find_nearest_nodes(x, y, self.graph, self.occupancy, 20, True)
 
         self.graph[(x, y)] = nearest
 
@@ -299,49 +300,49 @@ class PathPlan(object):
             self.graph[node][(x, y)] = nearest[node]
 
 
-def find_nearest_nodes(x, y, vertices, occupancy_grid, num_taken, world_frame=False):
-    """finds nearest valid nodes
+    def find_nearest_nodes(self, x, y, vertices, occupancy_grid, num_taken, world_frame=False):
+        """finds nearest valid nodes
 
-    Args:
-        x, y (float): x and y position
-        vertices (iter): verts in graph
-        occupancy_grid (2d array): binary occupancy grid
-        num_taken (int): how many connections should we try and make
+        Args:
+            x, y (float): x and y position
+            vertices (iter): verts in graph
+            occupancy_grid (2d array): binary occupancy grid
+            num_taken (int): how many connections should we try and make
 
-    Returns:
-        dict: dict mapping near node to dist from x, y
-    """
-    nearest = {}
-    for i, j in vertices:
-        dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
-        if len(nearest) < num_taken:
-            nearest[(i, j)] = dist
-        else:
-            cur_max = max(nearest, key=nearest.get)
-
-            if nearest[cur_max] > dist:
+        Returns:
+            dict: dict mapping near node to dist from x, y
+        """
+        nearest = {}
+        for i, j in vertices:
+            dist = ((x - i) ** 2.0 + (y - j) ** 2.0) ** 0.5
+            if len(nearest) < num_taken:
                 nearest[(i, j)] = dist
-                del nearest[cur_max]
+            else:
+                cur_max = max(nearest, key=nearest.get)
 
-    del nearest[min(nearest, key=nearest.get)]
+                if nearest[cur_max] > dist:
+                    nearest[(i, j)] = dist
+                    del nearest[cur_max]
 
-    remove_these = set()
-    for i, j in nearest:
-        if world_frame:
-            (x_img, y_img) = PathPlan.world_to_pixel(x, y)
-            (i_img, j_img) = PathPlan.world_to_pixel(i, j)
-            line_pixels = create_line(int(x_img), int(y_img), int(i_img), int(j_img))
-        else:
-            line_pixels = create_line(x, y, i, j)
-        for x_pos, y_pos in line_pixels:
-            if occupancy_grid[y_pos][x_pos] == False:
-                remove_these.add((i, j))
-                break
+        del nearest[min(nearest, key=nearest.get)]
 
-    for pos in remove_these:
-        del nearest[pos]
+        remove_these = set()
+        for i, j in nearest:
+            if world_frame:
+                (x_img, y_img) = self.world_to_pixel(x, y)
+                (i_img, j_img) = self.world_to_pixel(i, j)
+                line_pixels = create_line(int(x_img), int(y_img), int(i_img), int(j_img))
+            else:
+                line_pixels = create_line(x, y, i, j)
+            for x_pos, y_pos in line_pixels:
+                if occupancy_grid[y_pos][x_pos] == False:
+                    remove_these.add((i, j))
+                    break
 
-    return nearest
+        for pos in remove_these:
+            del nearest[pos]
+
+        return nearest
 
 
 def create_line(x, y, i, j):
