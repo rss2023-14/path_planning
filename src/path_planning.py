@@ -7,8 +7,9 @@ from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import random
 import time, os
-import skimage
-import skimage.morphology
+# import skimage
+# import skimage.morphology
+import cv2
 from utils import LineTrajectory
 from tf.transformations import euler_from_quaternion
 
@@ -83,10 +84,10 @@ class PathPlan(object):
         Get goal point as PoseStamped, and initiate path planning to follow.
         """
         if self.current_pose is None:
-            rospy.loginfo("Odom not initialized yet!")
+            rospy.logwarn("Odom not initialized yet!")
             return
         elif self.graph is None:
-            rospy.loginfo("Graph not initialized yet!")
+            rospy.logwarn("Graph not initialized yet!")
             return
 
         # Start
@@ -159,7 +160,6 @@ class PathPlan(object):
         """
         self.trajectory.clear()
         rospy.loginfo("Planning path...")
-        # rospy.loginfo("Map to use: " + str(map))
 
         # Define a function to calculate the Manhattan distance between two points
         def heuristic(start, end):
@@ -181,7 +181,7 @@ class PathPlan(object):
         open_nodes = [(heuristic(start_point, end_point), start_point)]
 
         # Loop until we find the goal node or exhaust all possible paths
-        i = 1 # Track iterations (DEBUGGING)
+        i = 1 # Track iterations
         while open_nodes:
             open_nodes.sort()
             current = open_nodes.pop(0)[1]
@@ -201,24 +201,17 @@ class PathPlan(object):
                 self.traj_pub.publish(self.trajectory.toPoseArray())
                 self.trajectory.publish_viz()
 
-                rospy.loginfo("Path found: " + str(path))
+                rospy.loginfo("Path found after " + str(i) + " iterations: " + str(path))
                 return path
 
             # Add the current node to the visited set
             visited.add(current)
 
             # Loop through the current node's neighbors
-            rospy.loginfo("Current node: " + str(current))
-            rospy.loginfo("This node has neighbors: " + str(map[current]))
-
             for neighbor in map[current]:
                 if neighbor in visited:
-                    rospy.loginfo("Already visited!")
                     continue
-                rospy.loginfo("Trying a new node! Iter " + str(i))
-                rospy.loginfo("Exploring node: " + str(neighbor))
                 d = np.linalg.norm(np.array(neighbor) - np.array(end_point))
-                rospy.loginfo("Distance to end from this node: " + str(d))
                 i += 1
 
                 # Calculate the tentative g-score for this neighbor
@@ -231,9 +224,7 @@ class PathPlan(object):
                     g_scores[neighbor] = tentative_g_score
                     f_score = tentative_g_score + heuristic(neighbor, end_point)
                     open_nodes.append((f_score, neighbor))
-                    rospy.loginfo("Appending this neighbor to open_nodes!")
                     parents[neighbor] = current
-                rospy.loginfo("Length of open_nodes: " + str(len(open_nodes)))
 
         # No path found
         rospy.logwarn("No path found!")
@@ -287,6 +278,9 @@ class PathPlan(object):
             else:
                 data[i] = 100
 
+        """
+        # Code using scikit-image replace by cv2, to avoid import errors
+
         # Construct image
         img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
         width = len(img[0])
@@ -297,6 +291,17 @@ class PathPlan(object):
         occupancy_grid = img > globalthreshold
         footprint = skimage.morphology.disk(10)
         occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
+        """
+
+        img = np.array(data).reshape(height, width).astype(np.uint8) * 255
+        height, width = img.shape
+        _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Erode occupancy grid
+        kernel_size = 10
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        eroded = cv2.erode(thresh, kernel)
+        occupancy_grid = eroded.astype(np.bool)
 
         # Get random sample of valid pixel locations
         vertices = {(834, 527)}
