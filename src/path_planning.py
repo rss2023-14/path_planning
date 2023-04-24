@@ -115,7 +115,7 @@ class PathPlan(object):
         Find a path to the goal with rrt
 
         Args:
-            data (1d array): occupancy grid data
+            data (2d array): occupancy grid data
             width (int): img width
             height (int): img height
             distance_to_goal (int): maximum distance from sampled point to actual goal point where the algo will consider the sampled point the goal
@@ -207,16 +207,7 @@ class PathPlan(object):
             world_path.append(self.pixel_to_world(x, y))
 
         return world_path
-                    
-        # # Transform to world frame
-        # world_frame_adj = {}
-        # for x, y in adjacency:
-        #     adjacent = {}
-        #     for i, j in adjacency[(x, y)]:
-        #         adjacent[self.pixel_to_world(i, j)] = (
-        #             adjacency[(x, y)][(i, j)] * self.resolution
-        #         )
-        #     world_frame_adj[self.pixel_to_world(x, y)] = adjacent
+
 
     def plan_path(self, start_point, end_point, map):
         """
