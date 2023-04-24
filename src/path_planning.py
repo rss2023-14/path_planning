@@ -70,12 +70,6 @@ class PathPlan(object):
         )
         rospy.loginfo("Initialized, graph made!")
 
-        # Find RRT path
-        path = self.make_rrt_path(
-            np.array(msg.data), msg.info.width, msg.info.height
-        )
-        rospy.loginfo("rrt path found!")
-
     def odom_cb(self, msg):
         """
         Gets Odometry msg and stores current pose.
@@ -109,6 +103,12 @@ class PathPlan(object):
 
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
+        # Find RRT path
+        path = self.make_rrt_path(
+            self.occupancy, msg.info.width, msg.info.height
+        )
+        rospy.loginfo("rrt path found!")
+
 
     def make_rrt_path(self, data, width, height, distance_to_goal = 25, rewiring_radius = 50):
         """
@@ -124,30 +124,6 @@ class PathPlan(object):
         Returns:
             list of tuples which is the path from the start to the goal
         """
-        # Reset occupancy grid values
-        for i in range(len(data)):
-            if data[i] == -1:
-                data[i] = 0
-            elif data[i] > 5:
-                data[i] = 0
-            else:
-                data[i] = 100
-
-        """
-        # Code using scikit-image replace by cv2, to avoid import errors
-
-        # Construct image
-        img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
-        width = len(img[0])
-        height = len(img)
-
-        # Erode occupancy grid
-        globalthreshold = skimage.filters.threshold_otsu(img)
-        occupancy_grid = img > globalthreshold
-        footprint = skimage.morphology.disk(10)
-        occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
-        """
-
         # check preconditions of having a current position and goal
         if self.current_pose is None: # start
             rospy.logwarn("Odom not initialized yet!")
@@ -156,17 +132,6 @@ class PathPlan(object):
         if self.goal is None: # end
             rospy.logwarn("Goal not initialized yet!")
             return []
-
-        # discretize image into points that we can make a graph on
-        img = np.array(data).reshape(height, width).astype(np.uint8) * 255
-        height, width = img.shape
-        _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # Erode occupancy grid
-        kernel_size = 10
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-        eroded = cv2.erode(thresh, kernel)
-        occupancy_grid = eroded.astype(np.bool)
 
         def close_to_goal(point, distance_to_goal):
             distance = ((point[0] - self.goal[0])**2 + (point[1] - self.goal[1])**2) ** 0.5
@@ -182,7 +147,7 @@ class PathPlan(object):
         for i in range(10000):
 
             (x, y) = (random.randrange(width), random.randrange(height)) # sample point
-            if occupancy_grid[y][x]: # if sample pointed is not in obstacle
+            if data[y][x]: # if sample pointed is not in obstacle
                 
                 point_to_add = (x, y)
                 # find which point in graph is closest
@@ -211,7 +176,7 @@ class PathPlan(object):
                 
                 is_collision = False
                 for x_pos, y_pos in line_pixels:
-                    if not occupancy_grid[y_pos][x_pos]:
+                    if not data[y_pos][x_pos]:
                         is_collision = True
                         break
 
