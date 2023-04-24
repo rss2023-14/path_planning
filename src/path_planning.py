@@ -118,10 +118,11 @@ class PathPlan(object):
             data (1d array): occupancy grid data
             width (int): img width
             height (int): img height
+            distance_to_goal (int): maximum distance from sampled point to actual goal point where the algo will consider the sampled point the goal
+            rewiring_radius (int): maximum distance a new point will consider an old point to be rewired to
 
         Returns:
-            (dict of dicts, 2d array): graph and eroded occupancy grid
-            graph with path to goal?
+            list of tuples which is the path from the start to the goal
         """
         # Reset occupancy grid values
         for i in range(len(data)):
@@ -178,7 +179,7 @@ class PathPlan(object):
         rrt_graph = {rrt_start: {"parent": rrt_start, rrt_start: 0}} #{(x1, y1): {parent: (i, j), (x2, y2): distance}}
         path = None
 
-        for i in range(1000):
+        for i in range(10000):
 
             (x, y) = (random.randrange(width), random.randrange(height)) # sample point
             if occupancy_grid[y][x]: # if sample pointed is not in obstacle
