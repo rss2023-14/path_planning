@@ -23,6 +23,7 @@ class PathPlan(object):
         rospy.loginfo("Initializing path planning...")
         self.graph = None
         self.occupancy = None
+        self.goal = None # add so we can access goal in graph making for rrt
         self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
         self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
 
@@ -69,6 +70,12 @@ class PathPlan(object):
         )
         rospy.loginfo("Initialized, graph made!")
 
+        # Find RRT path
+        path = self.make_rrt_path(
+            np.array(msg.data), msg.info.width, msg.info.height
+        )
+        rospy.loginfo("rrt path found!")
+
     def odom_cb(self, msg):
         """
         Gets Odometry msg and stores current pose.
@@ -98,59 +105,152 @@ class PathPlan(object):
         gp = msg.pose.position  # x, y, z
         go = msg.pose.orientation  # x, y, z, w
 
+        self.goal = (gp.x, gp.y)
+
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
-    def create_sampled_graph(self, start_point, end_point, map):
+
+    def make_rrt_path(self, data, width, height, distance_to_goal = 25, rewiring_radius = 50):
         """
-        Create graph using PRM/sampling-based method.
-        Returns a graph in form {(x1, y1): [(x2, y2), (x3, y3)]}
+        Find a path to the goal with rrt
+
+        Args:
+            data (1d array): occupancy grid data
+            width (int): img width
+            height (int): img height
+
+        Returns:
+            (dict of dicts, 2d array): graph and eroded occupancy grid
+            graph with path to goal?
         """
-        # Get occupancy dimensions (2d numpy array[y][x]), integers
-        width = self.occupancy[0].size
-        height = self.occupancy.size / width
+        # Reset occupancy grid values
+        for i in range(len(data)):
+            if data[i] == -1:
+                data[i] = 0
+            elif data[i] > 5:
+                data[i] = 0
+            else:
+                data[i] = 100
 
-        # Initialize start and end in list of (width, height) tuples
-        points = [start_point, end_point]
+        """
+        # Code using scikit-image replace by cv2, to avoid import errors
 
-        # Find random points
-        for i in range(100):
-            x_rand_point = np.random.randint(0, width - 1)
-            y_rand_point = np.random.randint(0, height - 1)
-            points.append((x_rand_point, y_rand_point))
+        # Construct image
+        img = skimage.color.rgb2gray(np.array(data).reshape(height, width))
+        width = len(img[0])
+        height = len(img)
 
-        valid_points = []
-        for x, y in points:
-            # Make sure sampled points are not inside obstacles
-            if self.occupancy[y, x]:
-                # True means they are not inside obstacle
-                valid_points.append((x, y))
+        # Erode occupancy grid
+        globalthreshold = skimage.filters.threshold_otsu(img)
+        occupancy_grid = img > globalthreshold
+        footprint = skimage.morphology.disk(10)
+        occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
+        """
 
-        # Make sure start and end points are in correct form
-        assert start_point in valid_points, "Start point not in correct form!"
-        assert end_point in valid_points, "End point not in correct form!"
+        # check preconditions of having a current position and goal
+        if self.current_pose is None: # start
+            rospy.logwarn("Odom not initialized yet!")
+            return []
+        
+        if self.goal is None: # end
+            rospy.logwarn("Goal not initialized yet!")
+            return []
 
-        # Find all permutations of points
-        adjacency_graph = {point: [] for point in valid_points}
-        for index, first_point in enumerate(valid_points):
-            for second_point in valid_points[index + 1 :]:
-                # Find equation for line
-                slope = float(second_point[1] - first_point[1]) / (second_point[0] - first_point[0])
-                b = first_point[1] - slope * first_point[0]
+        # discretize image into points that we can make a graph on
+        img = np.array(data).reshape(height, width).astype(np.uint8) * 255
+        height, width = img.shape
+        _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-                # Check for collision
-                isCollision = False
-                for x_val in range(first_point[0], second_point[0]):
-                    y_val = slope * x_val + b
-                    if not self.occupancy[y_val, x_val]:
-                        # If any point on the line is in an obstacle, don't add to adjacency graph
-                        isCollision = True
+        # Erode occupancy grid
+        kernel_size = 10
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        eroded = cv2.erode(thresh, kernel)
+        occupancy_grid = eroded.astype(np.bool)
+
+        def close_to_goal(point, distance_to_goal):
+            distance = ((point[0] - self.goal[0])**2 + (point[1] - self.goal[1])**2) ** 0.5
+            if distance <= distance_to_goal:
+                return True
+            return False
+
+        # rrt algorithm
+        rrt_start = (self.current_pose[0], self.current_pose[1]) # make deep copy of start node
+        rrt_graph = {rrt_start: {"parent": rrt_start, rrt_start: 0}} #{(x1, y1): {parent: (i, j), (x2, y2): distance}}
+        path = None
+
+        for i in range(1000):
+
+            (x, y) = (random.randrange(width), random.randrange(height)) # sample point
+            if occupancy_grid[y][x]: # if sample pointed is not in obstacle
+                
+                point_to_add = (x, y)
+                # find which point in graph is closest
+                min_dist_to_point = np.inf
+                closest_point = None # will store point in graph closest to sampled point
+                # close_points = [] # candidates for rewiring
+                for existing_point in rrt_graph.keys(): 
+                    distance = ((x - existing_point[0])**2 + (y - existing_point[1])**2) ** 0.5
+                    # if distance < rewiring_radius:
+                    #     close_points.append(distance)
+                    if distance < min_dist_to_point:
+                        min_dist_to_point = distance
+                        closest_point = existing_point
+
+                assert(closest_point is not None)
+                i = closest_point[0]
+                j = closest_point[1]
+
+                # check if line between points goes through obstacle
+                if False: # world frame
+                    (x_img, y_img) = self.world_to_pixel(x, y)
+                    (i_img, j_img) = self.world_to_pixel(i, j)
+                    line_pixels = self.create_line(int(x_img), int(y_img), int(i_img), int(j_img))
+                else:
+                    line_pixels = self.create_line(x, y, i, j)
+                
+                is_collision = False
+                for x_pos, y_pos in line_pixels:
+                    if not occupancy_grid[y_pos][x_pos]:
+                        is_collision = True
                         break
 
-                if not isCollision:
-                    adjacency_graph[first_point].append(second_point)
-                    adjacency_graph[second_point].append(first_point)
+                if is_collision:
+                    continue # sample new point
 
-        return adjacency_graph
+                if True: # distance in graph is just between the two points
+                    rrt_graph[closest_point][point_to_add] = min_dist_to_point
+                else: # distance is total distance for potential rewiring in the future
+                    rrt_graph[closest_point][point_to_add] = min_dist_to_point + rrt_graph[rrt_graph[closest_point]["parent"]][closest_point]
+                rrt_graph[point_to_add] = {"parent": closest_point}
+
+                if close_to_goal(point_to_add, distance_to_goal):
+                    path = [point_to_add]
+                    backtrack_point = point_to_add
+                    while backtrack_point != rrt_start:
+                        backtrack_point = rrt_graph[backtrack_point]["parent"]
+                        path.insert(0, backtrack_point)
+                        #backtrack to find path to return
+                    break
+        
+        if path is None:
+            rospy.logwarn("Path not found!")
+            return []
+        
+        world_path = []
+        for x, y in path:
+            world_path.append(self.pixel_to_world(x, y))
+
+        return world_path
+                    
+        # # Transform to world frame
+        # world_frame_adj = {}
+        # for x, y in adjacency:
+        #     adjacent = {}
+        #     for i, j in adjacency[(x, y)]:
+        #         adjacent[self.pixel_to_world(i, j)] = (
+        #             adjacency[(x, y)][(i, j)] * self.resolution
+        #         )
+        #     world_frame_adj[self.pixel_to_world(x, y)] = adjacent
 
     def plan_path(self, start_point, end_point, map):
         """
