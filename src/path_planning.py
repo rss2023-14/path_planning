@@ -10,9 +10,9 @@ import time, os
 
 # import skimage
 # import skimage.morphology
+# import cv2
 from scipy.ndimage import binary_dilation
 
-# import cv2
 from utils import LineTrajectory
 from tf.transformations import euler_from_quaternion
 
@@ -29,6 +29,9 @@ class PathPlan(object):
         self.goal = None  # add so we can access goal in graph making for rrt
         self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
         self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
+
+        self.width = None
+        self.height = None
 
         self.translation = None
         self.rot_matrix = None
@@ -71,6 +74,8 @@ class PathPlan(object):
         (self.graph, self.occupancy) = self.make_occupancy_graph(
             np.array(msg.data), msg.info.width, msg.info.height
         )
+        self.width = msg.info.width
+        self.height = msg.info.height
         rospy.loginfo("Initialized, graph made!")
 
     def odom_cb(self, msg):
@@ -107,8 +112,8 @@ class PathPlan(object):
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
         # Find RRT path
-        path = self.make_rrt_path(self.occupancy, msg.info.width, msg.info.height)
-        rospy.loginfo("rrt path found!")
+        # path = self.make_rrt_path(self.occupancy, self.width, self.height)
+        # rospy.loginfo("RRT path found!")
 
     def make_rrt_path(
         self, data, width, height, distance_to_goal=25, rewiring_radius=50
@@ -429,6 +434,21 @@ class PathPlan(object):
         occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
         """
 
+        """
+        Code using cv2 replaced by scipy, to avoid import errors 2 (eletric boogaloo)
+
+        height, width = img.shape
+        _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Erode occupancy grid
+        kernel_size = 10
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)
+        )
+        eroded = cv2.erode(thresh, kernel)
+        occupancy_grid = eroded.astype(np.bool)
+        """
+
         grid = np.array(data).reshape(height, width)
         structure = [
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -455,22 +475,11 @@ class PathPlan(object):
         ]
         occupancy_grid = binary_dilation(grid, structure=structure)
 
-        """ height, width = img.shape
-        _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        # Erode occupancy grid
-        kernel_size = 10
-        kernel = cv2.getStructuringElement(
-            cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)
-        )
-        eroded = cv2.erode(thresh, kernel)
-        occupancy_grid = eroded.astype(np.bool) """
-
         # Get random sample of valid pixel locations
         vertices = {(834, 527)}
         while len(vertices) < self.NUM_VERTICES:
             (x, y) = (random.randrange(width), random.randrange(height))
-            if occupancy_grid[y][x]:
+            if not occupancy_grid[y][x]:
                 vertices.add((x, y))
 
         # Create graph from vertices
@@ -544,7 +553,7 @@ class PathPlan(object):
             else:
                 line_pixels = self.create_line(x, y, i, j)
             for x_pos, y_pos in line_pixels:
-                if not occupancy_grid[y_pos][x_pos]:
+                if occupancy_grid[y_pos][x_pos]:
                     remove_these.add((i, j))
                     break
 
