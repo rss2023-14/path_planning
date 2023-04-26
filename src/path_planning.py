@@ -7,9 +7,12 @@ from nav_msgs.msg import Odometry, OccupancyGrid
 import rospkg
 import random
 import time, os
+
 # import skimage
 # import skimage.morphology
-import cv2
+from scipy.ndimage import binary_dilation
+
+# import cv2
 from utils import LineTrajectory
 from tf.transformations import euler_from_quaternion
 
@@ -23,7 +26,7 @@ class PathPlan(object):
         rospy.loginfo("Initializing path planning...")
         self.graph = None
         self.occupancy = None
-        self.goal = None # add so we can access goal in graph making for rrt
+        self.goal = None  # add so we can access goal in graph making for rrt
         self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
         self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
 
@@ -104,13 +107,12 @@ class PathPlan(object):
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
         # Find RRT path
-        path = self.make_rrt_path(
-            self.occupancy, msg.info.width, msg.info.height
-        )
+        path = self.make_rrt_path(self.occupancy, msg.info.width, msg.info.height)
         rospy.loginfo("rrt path found!")
 
-
-    def make_rrt_path(self, data, width, height, distance_to_goal = 25, rewiring_radius = 50):
+    def make_rrt_path(
+        self, data, width, height, distance_to_goal=25, rewiring_radius=50
+    ):
         """
         Find a path to the goal with rrt
 
@@ -125,55 +127,66 @@ class PathPlan(object):
             list of tuples which is the path from the start to the goal
         """
         # check preconditions of having a current position and goal
-        if self.current_pose is None: # start
+        if self.current_pose is None:  # start
             rospy.logwarn("Odom not initialized yet!")
             return []
-        
-        if self.goal is None: # end
+
+        if self.goal is None:  # end
             rospy.logwarn("Goal not initialized yet!")
             return []
 
         def close_to_goal(point, distance_to_goal):
-            distance = ((point[0] - self.goal[0])**2 + (point[1] - self.goal[1])**2) ** 0.5
+            distance = (
+                (point[0] - self.goal[0]) ** 2 + (point[1] - self.goal[1]) ** 2
+            ) ** 0.5
             if distance <= distance_to_goal:
                 return True
             return False
 
         # rrt algorithm
-        rrt_start = (self.current_pose[0], self.current_pose[1]) # make deep copy of start node
-        rrt_graph = {rrt_start: {"parent": rrt_start, rrt_start: 0}} #{(x1, y1): {parent: (i, j), (x2, y2): distance}}
+        rrt_start = (
+            self.current_pose[0],
+            self.current_pose[1],
+        )  # make deep copy of start node
+        rrt_graph = {
+            rrt_start: {"parent": rrt_start, rrt_start: 0}
+        }  # {(x1, y1): {parent: (i, j), (x2, y2): distance}}
         path = None
 
         for i in range(10000):
-
-            (x, y) = (random.randrange(width), random.randrange(height)) # sample point
-            if data[y][x]: # if sample pointed is not in obstacle
-                
+            (x, y) = (random.randrange(width), random.randrange(height))  # sample point
+            if data[y][x]:  # if sample pointed is not in obstacle
                 point_to_add = (x, y)
                 # find which point in graph is closest
                 min_dist_to_point = np.inf
-                closest_point = None # will store point in graph closest to sampled point
+                closest_point = (
+                    None  # will store point in graph closest to sampled point
+                )
                 # close_points = [] # candidates for rewiring
-                for existing_point in rrt_graph.keys(): 
-                    distance = ((x - existing_point[0])**2 + (y - existing_point[1])**2) ** 0.5
+                for existing_point in rrt_graph.keys():
+                    distance = (
+                        (x - existing_point[0]) ** 2 + (y - existing_point[1]) ** 2
+                    ) ** 0.5
                     # if distance < rewiring_radius:
                     #     close_points.append(distance)
                     if distance < min_dist_to_point:
                         min_dist_to_point = distance
                         closest_point = existing_point
 
-                assert(closest_point is not None)
+                assert closest_point is not None
                 i = closest_point[0]
                 j = closest_point[1]
 
                 # check if line between points goes through obstacle
-                if False: # world frame
+                if False:  # world frame
                     (x_img, y_img) = self.world_to_pixel(x, y)
                     (i_img, j_img) = self.world_to_pixel(i, j)
-                    line_pixels = self.create_line(int(x_img), int(y_img), int(i_img), int(j_img))
+                    line_pixels = self.create_line(
+                        int(x_img), int(y_img), int(i_img), int(j_img)
+                    )
                 else:
                     line_pixels = self.create_line(x, y, i, j)
-                
+
                 is_collision = False
                 for x_pos, y_pos in line_pixels:
                     if not data[y_pos][x_pos]:
@@ -181,12 +194,15 @@ class PathPlan(object):
                         break
 
                 if is_collision:
-                    continue # sample new point
+                    continue  # sample new point
 
-                if True: # distance in graph is just between the two points
+                if True:  # distance in graph is just between the two points
                     rrt_graph[closest_point][point_to_add] = min_dist_to_point
-                else: # distance is total distance for potential rewiring in the future
-                    rrt_graph[closest_point][point_to_add] = min_dist_to_point + rrt_graph[rrt_graph[closest_point]["parent"]][closest_point]
+                else:  # distance is total distance for potential rewiring in the future
+                    rrt_graph[closest_point][point_to_add] = (
+                        min_dist_to_point
+                        + rrt_graph[rrt_graph[closest_point]["parent"]][closest_point]
+                    )
                 rrt_graph[point_to_add] = {"parent": closest_point}
 
                 if close_to_goal(point_to_add, distance_to_goal):
@@ -195,19 +211,18 @@ class PathPlan(object):
                     while backtrack_point != rrt_start:
                         backtrack_point = rrt_graph[backtrack_point]["parent"]
                         path.insert(0, backtrack_point)
-                        #backtrack to find path to return
+                        # backtrack to find path to return
                     break
-        
+
         if path is None:
             rospy.logwarn("Path not found!")
             return []
-        
+
         world_path = []
         for x, y in path:
             world_path.append(self.pixel_to_world(x, y))
 
         return world_path
-
 
     def plan_path(self, start_point, end_point, map):
         """
@@ -220,10 +235,10 @@ class PathPlan(object):
 
         # Define a function to calculate the Euclidean distance between two points
         def heuristic(start, end):
-            return ((end[0]-start[0])**2+(end[1]-start[1])**2)**(1/2)
+            return ((end[0] - start[0]) ** 2 + (end[1] - start[1]) ** 2) ** (1 / 2)
 
-        self.add_node(start_point[0],start_point[1])
-        self.add_node(end_point[0],end_point[1])
+        self.add_node(start_point[0], start_point[1])
+        self.add_node(end_point[0], end_point[1])
 
         # Define a dictionary to keep track of the cost of reaching each node from the start node
         g_scores = {start_point: 0}
@@ -238,7 +253,7 @@ class PathPlan(object):
         open_nodes = [(heuristic(start_point, end_point), start_point)]
 
         # Loop until we find the goal node or exhaust all possible paths
-        i = 1 # Track iterations
+        i = 1  # Track iterations
         while open_nodes:
             open_nodes.sort()
             current = open_nodes.pop(0)[1]
@@ -258,7 +273,9 @@ class PathPlan(object):
                 self.traj_pub.publish(self.trajectory.toPoseArray())
                 self.trajectory.publish_viz()
 
-                rospy.loginfo("Path found after " + str(i) + " iterations: " + str(path))
+                rospy.loginfo(
+                    "Path found after " + str(i) + " iterations: " + str(path)
+                )
                 return path
 
             # Add the current node to the visited set
@@ -286,6 +303,7 @@ class PathPlan(object):
         # No path found
         rospy.logwarn("No path found!")
         return None
+
     # def plan_path(self, start_point, end_point, map):
     # DJIKSTRASSSSSSSSSSSSSSSS
     #     """
@@ -338,7 +356,6 @@ class PathPlan(object):
 
     #             tentative_cost = current_cost + distance(current, neighbor)
 
-   
     #             if tentative_cost < costs[neighbor]:
     #                 costs[neighbor] = tentative_cost
     #                 open_nodes.append((tentative_cost, neighbor))
@@ -356,10 +373,10 @@ class PathPlan(object):
         # result = np.dot(self.inv_rot_matrix, ([x, y, 0] - self.translation))
         # return (result[0, 0] / self.resolution, result[0, 1] / self.resolution)
 
-        result = np.array([x,y,0]) * self.resolution
+        result = np.array([x, y, 0]) * self.resolution
         result = np.dot(self.rot_matrix, result)
         result += self.translation
-        return (result[0,0], result[0,1])
+        return (result[0, 0], result[0, 1])
 
     def world_to_pixel(self, x, y):
         """
@@ -370,11 +387,11 @@ class PathPlan(object):
         #     + self.translation
         # )
         # return (result[0, 0], result[0, 1])
-        result = np.array([x,y,0])
+        result = np.array([x, y, 0])
         result -= self.translation
         result = np.dot(self.inv_rot_matrix, result)
         result /= self.resolution
-        return (result[0,0], result[0,1])
+        return (result[0, 0], result[0, 1])
 
     def make_occupancy_graph(self, data, width, height):
         """
@@ -391,11 +408,11 @@ class PathPlan(object):
         # Reset occupancy grid values
         for i in range(len(data)):
             if data[i] == -1:
-                data[i] = 0
+                data[i] = True
             elif data[i] > 5:
-                data[i] = 0
+                data[i] = True
             else:
-                data[i] = 100
+                data[i] = False
 
         """
         # Code using scikit-image replace by cv2, to avoid import errors
@@ -412,15 +429,42 @@ class PathPlan(object):
         occupancy_grid = skimage.morphology.erosion(occupancy_grid, footprint)
         """
 
-        img = np.array(data).reshape(height, width).astype(np.uint8) * 255
-        height, width = img.shape
+        grid = np.array(data).reshape(height, width)
+        structure = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ]
+        occupancy_grid = binary_dilation(grid, structure=structure)
+
+        """ height, width = img.shape
         _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
         # Erode occupancy grid
         kernel_size = 10
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        kernel = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)
+        )
         eroded = cv2.erode(thresh, kernel)
-        occupancy_grid = eroded.astype(np.bool)
+        occupancy_grid = eroded.astype(np.bool) """
 
         # Get random sample of valid pixel locations
         vertices = {(834, 527)}
@@ -432,7 +476,9 @@ class PathPlan(object):
         # Create graph from vertices
         adjacency = {}
         for x, y in vertices:
-            adjacency[(x, y)] = self.find_nearest_nodes(x, y, vertices, occupancy_grid, self.NUM_EDGES_PER_NODE)
+            adjacency[(x, y)] = self.find_nearest_nodes(
+                x, y, vertices, occupancy_grid, self.NUM_EDGES_PER_NODE
+            )
 
         # Transform to world frame
         world_frame_adj = {}
@@ -450,13 +496,17 @@ class PathPlan(object):
         """
         Add node (x,y) to graph, connect edges to closest neighbors
         """
-        nearest = self.find_nearest_nodes(x, y, self.graph, self.occupancy, self.NUM_EDGES_PER_NODE, True)
+        nearest = self.find_nearest_nodes(
+            x, y, self.graph, self.occupancy, self.NUM_EDGES_PER_NODE, True
+        )
         self.graph[(x, y)] = nearest
 
         for node in nearest:
             self.graph[node][(x, y)] = nearest[node]
 
-    def find_nearest_nodes(self, x, y, vertices, occupancy_grid, num_taken, world_frame=False):
+    def find_nearest_nodes(
+        self, x, y, vertices, occupancy_grid, num_taken, world_frame=False
+    ):
         """
         Find nearest valid nodes in graph to (x,y).
 
@@ -488,7 +538,9 @@ class PathPlan(object):
             if world_frame:
                 (x_img, y_img) = self.world_to_pixel(x, y)
                 (i_img, j_img) = self.world_to_pixel(i, j)
-                line_pixels = self.create_line(int(x_img), int(y_img), int(i_img), int(j_img))
+                line_pixels = self.create_line(
+                    int(x_img), int(y_img), int(i_img), int(j_img)
+                )
             else:
                 line_pixels = self.create_line(x, y, i, j)
             for x_pos, y_pos in line_pixels:
