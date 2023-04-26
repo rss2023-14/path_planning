@@ -29,6 +29,7 @@ class PathPlan(object):
         self.goal = None  # add so we can access goal in graph making for rrt
         self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
         self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
+        self.NUM_SAMPLE_RRT = rospy.get_param("num_sample_rrt", 10000)
 
         self.width = None
         self.height = None
@@ -158,7 +159,7 @@ class PathPlan(object):
         }  # {(x1, y1): {parent: (i, j), (x2, y2): distance}}
         path = None
 
-        for i in range(10000):
+        for i in range(self.NUM_SAMPLE_RRT ):
             (x, y) = (random.randrange(width), random.randrange(height))  # sample point
             assert(x is int)
             assert(y is int)
