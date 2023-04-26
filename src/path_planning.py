@@ -163,7 +163,7 @@ class PathPlan(object):
         }  # {(x1, y1): {parent: (i, j), (x2, y2): distance}}
         path = None
 
-        for i in range(self.NUM_SAMPLE_RRT ):
+        for i in range(self.NUM_SAMPLE_RRT):
             (x, y) = (random.randrange(width), random.randrange(height))  # sample point
             x = int(round(x))
             y = int(round(y))
@@ -240,9 +240,7 @@ class PathPlan(object):
         self.traj_pub.publish(self.trajectory.toPoseArray())
         self.trajectory.publish_viz()
 
-        rospy.loginfo(
-            "Path found after " + str(i) + " iterations: " + str(path)
-        )
+        rospy.loginfo("Path found after " + str(i) + " iterations: " + str(path))
         return path
 
     def plan_path(self, start_point, end_point, map):
@@ -597,12 +595,24 @@ class PathPlan(object):
             set: points between
         """
         pixels = set()
-        for x_val in range(x, i):
-            y_found = (((j - y) / (i - x)) * (x_val - x)) + y
-            pixels.add((x_val, int(y_found)))
-        for y_val in range(y, j):
-            x_found = (((i - x) / (j - y)) * (y_val - y)) + x
-            pixels.add((int(x_found), y_val))
+
+        if x < i:
+            for x_val in range(x, i):
+                y_found = (((j - y) / (i - x)) * (x_val - x)) + y
+                pixels.add((x_val, int(y_found)))
+        else:
+            for x_val in range(i, x):
+                y_found = (((j - y) / (i - x)) * (x_val - x)) + y
+                pixels.add((x_val, int(y_found)))
+
+        if y < j:
+            for y_val in range(y, j):
+                x_found = (((i - x) / (j - y)) * (y_val - y)) + x
+                pixels.add((int(x_found), y_val))
+        else:
+            for y_val in range(j, y):
+                x_found = (((i - x) / (j - y)) * (y_val - y)) + x
+                pixels.add((int(x_found), y_val))
 
         return pixels
 
