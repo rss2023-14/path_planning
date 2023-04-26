@@ -30,6 +30,9 @@ class PathPlan(object):
         self.NUM_VERTICES = rospy.get_param("num_vertices", 1000)
         self.NUM_EDGES_PER_NODE = rospy.get_param("num_edges_per_node", 20)
         self.NUM_SAMPLE_RRT = rospy.get_param("num_sample_rrt", 10000)
+        self.END_THRESHOLD = rospy.get_param("end_threshold", 0.5)
+        self.MAKE_RANDOM_GRAPH = rospy.get_param("make_random_graph", True)
+        self.GRAPH_DISCRETIZATION = rospy.get_param("graph_discretization", 10)
 
         self.width = None
         self.height = None
@@ -93,6 +96,7 @@ class PathPlan(object):
         """
         Get goal point as PoseStamped, and initiate path planning to follow.
         """
+        rospy.loginfo("Goal point acquired.")
         if self.current_pose is None:
             rospy.logwarn("Odom not initialized yet!")
             return
@@ -113,11 +117,11 @@ class PathPlan(object):
         path = self.plan_path(sp, (gp.x, gp.y), self.graph)
 
         # Find RRT path
-        # path = self.make_rrt_path(self.occupancy, self.width, self.height)
+        # path = self.make_rrt_path(self.occupancy, self.width, self.height, distance_to_goal=self.END_THRESHOLD)
         # rospy.loginfo("RRT path found!")
 
     def make_rrt_path(
-        self, data, width, height, distance_to_goal=25, rewiring_radius=50
+        self, data, width, height, distance_to_goal=0.5, rewiring_radius=50
     ):
         """
         Find a path to the goal with rrt
@@ -161,11 +165,9 @@ class PathPlan(object):
 
         for i in range(self.NUM_SAMPLE_RRT ):
             (x, y) = (random.randrange(width), random.randrange(height))  # sample point
-            x = round(x)
-            y = round(y)
-            
-            assert(x is int)
-            assert(y is int)
+            x = int(round(x))
+            y = int(round(y))
+
             if data[y][x]:  # if sample pointed is not in obstacle
                 point_to_add = (x, y)
                 # find which point in graph is closest
@@ -187,11 +189,8 @@ class PathPlan(object):
                 assert closest_point is not None
                 i = closest_point[0]
                 j = closest_point[1]
-                i = round(i)
-                j = round(j)
-
-                assert(i is int)
-                assert(j is int)
+                i = int(round(i))
+                j = int(round(j))
 
                 # check if line between points goes through obstacle
                 if False:  # world frame
@@ -234,11 +233,17 @@ class PathPlan(object):
             rospy.logwarn("Path not found!")
             return []
 
-        world_path = []
-        for x, y in path:
-            world_path.append(self.pixel_to_world(x, y))
+        # Construct trajectory
+        for node in path:
+            p = Point(x=node[0], y=node[1], z=0)
+            self.trajectory.addPoint(p)
+        self.traj_pub.publish(self.trajectory.toPoseArray())
+        self.trajectory.publish_viz()
 
-        return world_path
+        rospy.loginfo(
+            "Path found after " + str(i) + " iterations: " + str(path)
+        )
+        return path
 
     def plan_path(self, start_point, end_point, map):
         """
@@ -488,10 +493,17 @@ class PathPlan(object):
 
         # Get random sample of valid pixel locations
         vertices = {(834, 527)}
-        while len(vertices) < self.NUM_VERTICES:
-            (x, y) = (random.randrange(width), random.randrange(height))
-            if not occupancy_grid[y][x]:
-                vertices.add((x, y))
+
+        if self.MAKE_RANDOM_GRAPH:
+            while len(vertices) < self.NUM_VERTICES:
+                (x, y) = (random.randrange(width), random.randrange(height))
+                if not occupancy_grid[y][x]:
+                    vertices.add((x, y))
+        else:
+            for y in range(0, height, self.GRAPH_DISCRETIZATION):
+                for x in range(0, width, self.GRAPH_DISCRETIZATION):
+                    if not occupancy_grid[y][x]:
+                        vertices.add((x, y))
 
         # Create graph from vertices
         adjacency = {}
