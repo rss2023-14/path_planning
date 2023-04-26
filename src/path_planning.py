@@ -160,6 +160,8 @@ class PathPlan(object):
 
         for i in range(10000):
             (x, y) = (random.randrange(width), random.randrange(height))  # sample point
+            assert(x is int)
+            assert(y is int)
             if data[y][x]:  # if sample pointed is not in obstacle
                 point_to_add = (x, y)
                 # find which point in graph is closest
@@ -181,6 +183,8 @@ class PathPlan(object):
                 assert closest_point is not None
                 i = closest_point[0]
                 j = closest_point[1]
+                assert(i is int)
+                assert(j is int)
 
                 # check if line between points goes through obstacle
                 if False:  # world frame
