@@ -218,9 +218,9 @@ class PathPlan(object):
         self.trajectory.clear()
         rospy.loginfo("Planning path...")
 
-        # Define a function to calculate the Manhattan distance between two points
+        # Define a function to calculate the Euclidean distance between two points
         def heuristic(start, end):
-            return abs(start[0] - end[0]) + abs(start[1] - end[1])
+            return ((end[0]-start[0])**2+(end[1]-start[1])**2)**(1/2)
 
         self.add_node(start_point[0],start_point[1])
         self.add_node(end_point[0],end_point[1])
@@ -286,6 +286,68 @@ class PathPlan(object):
         # No path found
         rospy.logwarn("No path found!")
         return None
+    # def plan_path(self, start_point, end_point, map):
+    # DJIKSTRASSSSSSSSSSSSSSSS
+    #     """
+    #     Take graph and use Dijkstra's algorithm to find best path.
+    #         - Assumes map is a nested dictionary of neighbors {(x1, y1): {(x2, y2): distance}}
+    #     """
+
+    #     # Define a function to calculate the distance between two points
+    #     def distance(start, end):
+    #         return map[start][end]
+
+    #     self.add_node(start_point[0],start_point[1])
+    #     self.add_node(end_point[0],end_point[1])
+
+    #     # Define a dictionary to keep track of the cost of reaching each node from the start node
+    #     costs = {node: float('inf') for node in map}
+    #     costs[start_point] = 0
+
+    #     # Define a dictionary to keep track of the parent node for each visited node
+    #     parents = {node: None for node in map}
+
+    #     visited = set()
+
+    #     open_nodes = [(0, start_point)]
+
+    #     # Loop until we find the goal node or exhaust all possible paths
+    #     while open_nodes:
+    #         open_nodes.sort()
+    #         current_cost, current = open_nodes.pop(0)
+
+    #         # If we have found the goal node, reconstruct the path and return it
+    #         if current == end_point:
+    #             path = []
+    #             while current:
+    #                 path.append(current)
+    #                 current = parents[current]
+    #             path.reverse()
+
+    #             self.traj_pub.publish(self.trajectory.toPoseArray())
+    #             self.trajectory.publish_viz()
+
+    #             return path
+
+    #         visited.add(current)
+
+    #         # Loop through the current node's neighbors
+    #         for neighbor in map[current]:
+    #             if neighbor in visited:
+    #                 continue
+
+    #             tentative_cost = current_cost + distance(current, neighbor)
+
+   
+    #             if tentative_cost < costs[neighbor]:
+    #                 costs[neighbor] = tentative_cost
+    #                 open_nodes.append((tentative_cost, neighbor))
+    #                 parents[neighbor] = current
+
+    #     # No path found
+    #     self.traj_pub.publish(self.trajectory.toPoseArray())
+    #     self.trajectory.publish_viz()
+    #     return None
 
     def pixel_to_world(self, x, y):
         """
