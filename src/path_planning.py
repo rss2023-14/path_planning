@@ -161,6 +161,9 @@ class PathPlan(object):
 
         for i in range(self.NUM_SAMPLE_RRT ):
             (x, y) = (random.randrange(width), random.randrange(height))  # sample point
+            x = round(x)
+            y = round(y)
+            
             assert(x is int)
             assert(y is int)
             if data[y][x]:  # if sample pointed is not in obstacle
