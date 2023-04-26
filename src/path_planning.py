@@ -187,6 +187,9 @@ class PathPlan(object):
                 assert closest_point is not None
                 i = closest_point[0]
                 j = closest_point[1]
+                i = round(i)
+                j = round(j)
+
                 assert(i is int)
                 assert(j is int)
 
